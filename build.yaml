@@ -1,0 +1,14 @@
+name: "Kofin Sync Queue"
+guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
+version: 1
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+owner: "kontell"
+overview: "Typed change queue for the Kofin Kodi client"
+description: "Companion plugin for plugin.video.kofin: records library and user-data changes as typed records (change reason, series/season parents), serves them with query-time Etags and an in-band retention cutoff, so offline Kodi boxes catch up with minimal traffic."
+category: "General"
+artifacts:
+  - "Jellyfin.Plugin.KofinSyncQueue.dll"
+  - "LiteDB.dll"
+changelog: |-
+  - Initial release: /Kofin/SyncQueue protocol v1

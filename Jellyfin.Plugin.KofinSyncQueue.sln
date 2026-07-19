@@ -1,0 +1,22 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.KofinSyncQueue", "Jellyfin.Plugin.KofinSyncQueue\Jellyfin.Plugin.KofinSyncQueue.csproj", "{B44718BE-01A5-4711-8F5B-3EE1A292FDA8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Jellyfin.Plugin.KofinSyncQueue.Tests", "tests\Jellyfin.Plugin.KofinSyncQueue.Tests\Jellyfin.Plugin.KofinSyncQueue.Tests.csproj", "{6C7E4C83-9D30-45C6-8802-6ADBEF8AE01B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B44718BE-01A5-4711-8F5B-3EE1A292FDA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B44718BE-01A5-4711-8F5B-3EE1A292FDA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B44718BE-01A5-4711-8F5B-3EE1A292FDA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B44718BE-01A5-4711-8F5B-3EE1A292FDA8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C7E4C83-9D30-45C6-8802-6ADBEF8AE01B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C7E4C83-9D30-45C6-8802-6ADBEF8AE01B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C7E4C83-9D30-45C6-8802-6ADBEF8AE01B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C7E4C83-9D30-45C6-8802-6ADBEF8AE01B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
