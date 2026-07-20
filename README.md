@@ -45,9 +45,13 @@ Semantics:
   (reasons OR'd); anything+Removed becomes Removed.
 * `Etag` is computed at **query time** from the live item via
   `BaseItem.GetEtag(user)` — byte-identical to the Etag in every DTO the
-  server hands out, so clients can drop records whose Etag matches what
-  they already stored *before* downloading anything. Removed records carry
-  `Etag: null`.
+  server hands out (verified live against a real item), so clients can drop
+  records whose Etag matches what they already stored *before* downloading
+  anything. Removed records carry no Etag.
+* **Null fields are omitted, not emitted as `null`** — the server's
+  serializer ignores nulls, so `Etag`, `UpdateReason`, `SeriesId` and
+  `SeasonId` are simply absent when they do not apply. Read them with an
+  absent-tolerant accessor; do not require the key.
 * Records are visibility-filtered for the calling user; `UserData` rows are
   the caller's only.
 * `RetentionCutoff > 0 && since < RetentionCutoff` means records in the gap
@@ -65,8 +69,30 @@ no full-collection rewrites under scan storms. Retention defaults to
 ```
 dotnet test
 dotnet publish Jellyfin.Plugin.KofinSyncQueue -c Release
+tools/package.sh            # → dist/kofin-sync-queue_<version>.zip
 ```
 
-Install: drop `Jellyfin.Plugin.KofinSyncQueue.dll` + `LiteDB.dll` into a
-`plugins/KofinSyncQueue` folder under the server's data directory and
-restart, or package with `jprm` using `build.yaml`.
+## Install
+
+Unzip into a versioned folder under the server's plugin directory and
+restart:
+
+```
+sudo unzip kofin-sync-queue_1.0.0.0.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_1.0.0.0"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_1.0.0.0"
+sudo systemctl restart jellyfin
+```
+
+**The `chown` is not optional.** Jellyfin rewrites `meta.json` on load to
+stamp the plugin's status, and `PluginManager.CreatePluginInstance` does
+not catch the failure — a plugin directory the server user cannot write
+takes the **whole server down at startup** with
+`UnauthorizedAccessException ... meta.json` (not a plugin-load warning,
+a fatal `StartServer` error). Unzipping as root is enough to cause it.
+
+Verify the plugin is live without opening the dashboard:
+
+```
+curl -s "$SERVER/Kofin/SyncQueue/Info?api_key=$KEY"
+```

@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Net.Mime;
 using System.Security.Claims;
 using System.Text.Json;
@@ -85,8 +84,12 @@ public class SyncQueueController : ControllerBase
             return BadRequest("since is required (unix seconds; 0 = everything)");
         }
 
+        // An api-key request authenticates as the server, not a user, and
+        // carries an all-zeros user claim that TryParse happily accepts —
+        // GetUserById(Guid.Empty) then throws rather than returning null.
+        // The feed is per-user by definition, so that is a 401, not a 500.
         var userIdValue = User.FindFirstValue(UserIdClaim);
-        if (!Guid.TryParse(userIdValue, out var userId))
+        if (!Guid.TryParse(userIdValue, out var userId) || userId.Equals(default))
         {
             return Unauthorized();
         }
@@ -119,44 +122,29 @@ public class SyncQueueController : ControllerBase
                 continue;
             }
 
-            string? etag = null;
-
-            if (record.Status != ItemStatus.Removed)
+            var projected = RecordProjection.Project(record, id =>
             {
-                var item = _libraryManager.GetItemById(record.ItemId);
+                var item = _libraryManager.GetItemById(id);
 
-                if (item is null)
+                // Deleted between event and query; the Removed record that
+                // follows (or has coalesced) covers it.
+                if (item is null || !item.IsVisibleStandalone(user))
                 {
-                    // Deleted between event and query; the Removed record
-                    // that follows (or has coalesced) covers it.
-                    continue;
-                }
-
-                if (!item.IsVisibleStandalone(user))
-                {
-                    continue;
+                    return new ItemResolution(false, null);
                 }
 
                 // Query time, not event time: an event storm on one item
                 // coalesces into a single current-state comparison, and the
                 // string is byte-identical to the DTO Etag clients store.
-                etag = item.GetEtag(user);
+                return new ItemResolution(true, item.GetEtag(user));
+            });
+
+            if (projected is null)
+            {
+                continue;
             }
 
-            response.Items.Add(new SyncQueueItem
-            {
-                Id = record.ItemId.ToString("N", CultureInfo.InvariantCulture),
-                Status = record.Status.ToString(),
-                MediaType = record.MediaType,
-                ItemType = record.ItemType,
-                LastModified = record.LastModified,
-                UpdateReason = record.UpdateReasons == 0
-                    ? null
-                    : ((ItemUpdateType)record.UpdateReasons).ToString(),
-                Etag = etag,
-                SeriesId = record.SeriesId?.ToString("N", CultureInfo.InvariantCulture),
-                SeasonId = record.SeasonId?.ToString("N", CultureInfo.InvariantCulture),
-            });
+            response.Items.Add(projected);
         }
 
         foreach (var record in _store.UserDataSince(since.Value, userId))

@@ -44,6 +44,10 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
         _libraryManager.ItemAdded += OnItemAdded;
         _libraryManager.ItemUpdated += OnItemUpdated;
         _libraryManager.ItemRemoved += OnItemRemoved;
+
+        // Subscription is otherwise invisible: a recorder that never fires
+        // and a recorder that never started look identical in the log.
+        _logger.LogInformation("Kofin library change recorder subscribed");
         return Task.CompletedTask;
     }
 
@@ -68,8 +72,39 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
 
     private void Capture(ItemChangeEventArgs e, ItemStatus status)
     {
-        if (!ItemClassifier.TryClassify(e.Item, out var itemType, out var mediaType))
+        // Live phase 5: Added and Removed reach this method but Updated never
+        // did, while the official plugin saw the same edit. Logging on entry
+        // (before the classifier can drop it) is what separates "the event
+        // never fired" from "we filtered it out" — the two are otherwise
+        // indistinguishable, since neither leaves a trace.
+        var item = e.Item;
+
+        // Logged on entry, before the classifier can drop the event: "never
+        // fired" and "filtered out" are otherwise indistinguishable, and
+        // telling them apart is what settled the phase-5 scare that this
+        // recorder was missing ItemUpdated (it was not — the query was wrong).
+        // Debug level; a server logging at Information shows nothing here, so
+        // raise the server's level rather than this one when diagnosing.
+        _logger.LogDebug(
+            "Kofin event: {Status} {Kind} {Id} reason={Reason}",
+            status,
+            item?.GetType().Name,
+            item?.Id,
+            e.UpdateReason);
+
+        if (item is null)
         {
+            return;
+        }
+
+        if (!ItemClassifier.TryClassify(item, out var itemType, out var mediaType))
+        {
+            _logger.LogDebug(
+                "Kofin event dropped by classifier: {Kind} {Id} location={Location} source={Source}",
+                item.GetType().Name,
+                item.Id,
+                item.LocationType,
+                item.SourceType);
             return;
         }
 

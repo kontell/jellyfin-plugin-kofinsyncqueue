@@ -53,6 +53,7 @@ public class UserDataRecorder : IHostedService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _userDataManager.UserDataSaved += OnUserDataSaved;
+        _logger.LogInformation("Kofin user-data recorder subscribed");
         return Task.CompletedTask;
     }
 
