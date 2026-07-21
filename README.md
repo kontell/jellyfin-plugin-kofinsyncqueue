@@ -49,7 +49,12 @@ tools/package.sh            # → dist/kofin-sync-queue_<version>.zip
 
 ## Install
 
-Unzip into a versioned folder under the server's plugin directory and restart:
+Add the Kontell plugin repository, then install from the catalog — Jellyfin unpacks the plugin into the right place (with the right ownership) itself:
+
+1. Dashboard → Plugins → Repositories → **+**, with the URL `https://repository.kontell.workers.dev/jellyfin/manifest.json`
+2. Dashboard → Plugins → Catalog → **Kofin Sync Queue** → Install, then restart the server.
+
+Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
 sudo unzip kofin-sync-queue_1.0.0.0.zip \
