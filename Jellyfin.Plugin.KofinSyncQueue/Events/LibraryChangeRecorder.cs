@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +28,12 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
     private readonly ILogger<LibraryChangeRecorder> _logger;
     private readonly object _lock = new object();
     private readonly List<ItemEvent> _pending = new List<ItemEvent>();
+
+    // Library resolution memo, keyed on the item's parent. Siblings share a
+    // parent, hence a library, so a scan storm pays one resolution per folder
+    // instead of one per item. Lives only as long as the batch it serves.
+    private readonly ConcurrentDictionary<Guid, List<Guid>?> _libraryMemo
+        = new ConcurrentDictionary<Guid, List<Guid>?>();
 
     private Timer? _timer;
 
@@ -131,6 +140,10 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
             UpdateReasons = (int)(e.UpdateReason & ~ItemUpdateType.None),
             SeriesId = seriesId,
             SeasonId = seasonId,
+            // Resolved here and nowhere else: this is the last point where a
+            // *removed* item is still materialised, and the ItemEvent that
+            // leaves this method is deliberately BaseItem-free.
+            LibraryIds = ResolveLibraries(e, itemType, status),
             Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
 
@@ -160,6 +173,57 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
         }
     }
 
+    /// <summary>
+    /// The collection folders containing the item — the ids clients whitelist,
+    /// the ids <c>/Items/{id}/Ancestors</c> hands them, and the ids Jellyfin
+    /// itself checks against <c>EnabledFolders</c>. Deliberately not
+    /// <c>GetTopParent()</c>, which answers with a *physical* folder id that no
+    /// client can match. Null means unresolvable, never "belongs to nothing".
+    /// </summary>
+    private List<Guid>? ResolveLibraries(ItemChangeEventArgs e, string itemType, ItemStatus status)
+    {
+        var item = e.Item;
+
+        if (ItemClassifier.IsCrossLibrary(itemType))
+        {
+            return null;
+        }
+
+        // By the time ItemRemoved fires, DeleteItem has already called
+        // item.SetParent(null) (LibraryManager.cs:577) — the item can no
+        // longer find its own ancestry, and resolving from it answers "no
+        // library" for every removal. The event carries the parent it
+        // computed beforehand; that is what a removal has to walk from.
+        var anchor = status == ItemStatus.Removed ? e.Parent ?? item : item;
+
+        // One key namespace for both: an episode's ParentId *is* its season
+        // id, which is exactly what e.Parent is on the removal path.
+        var key = item.ParentId.Equals(default) ? e.Parent?.Id ?? default : item.ParentId;
+
+        return key.Equals(default)
+            ? CollectionFolderIds(anchor)
+            : _libraryMemo.GetOrAdd(key, _ => CollectionFolderIds(anchor));
+    }
+
+    private List<Guid>? CollectionFolderIds(BaseItem item)
+    {
+        try
+        {
+            var ids = _libraryManager.GetCollectionFolders(item)
+                .Select(folder => folder.Id)
+                .ToList();
+
+            return ids.Count == 0 ? null : ids;
+        }
+        catch (Exception exception)
+        {
+            // Never lose the record over the dimension: an unresolved library
+            // degrades to the pre-v1.1 behaviour, a dropped event does not.
+            _logger.LogDebug(exception, "Could not resolve libraries for {Id}", item.Id);
+            return null;
+        }
+    }
+
     private void Flush(object? state)
     {
         List<ItemEvent> batch;
@@ -173,6 +237,7 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
 
             batch = new List<ItemEvent>(_pending);
             _pending.Clear();
+            _libraryMemo.Clear();
             _timer?.Dispose();
             _timer = null;
         }

@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Mime;
 using System.Security.Claims;
 using System.Text.Json;
 using Jellyfin.Extensions.Json;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
+using Jellyfin.Plugin.KofinSyncQueue.Events;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using Microsoft.AspNetCore.Authorization;
@@ -71,13 +75,15 @@ public class SyncQueueController : ControllerBase
     /// </summary>
     /// <param name="since">Unix-seconds watermark; 0 = everything. Required.</param>
     /// <param name="types">Include list of media-type classes (movies,tvshows,boxsets,musicvideos,music); absent = all.</param>
+    /// <param name="libraries">Include list of collection folder ids; absent = all. Records whose library is unknown are always served.</param>
     /// <returns>The <see cref="SyncQueueResponse"/>.</returns>
     [HttpGet("SyncQueue")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public ActionResult<SyncQueueResponse> GetSyncQueue(
         [FromQuery] long? since,
-        [FromQuery] string? types)
+        [FromQuery] string? types,
+        [FromQuery] string? libraries)
     {
         if (since is null)
         {
@@ -108,6 +114,12 @@ public class SyncQueueController : ControllerBase
             _logger.LogWarning("Ignoring unknown types tokens: {Tokens}", unknown);
         }
 
+        var libraryFilter = LibrariesFilter.Parse(libraries, out var unparsed);
+        if (unparsed.Count > 0)
+        {
+            _logger.LogWarning("Ignoring unreadable libraries tokens: {Tokens}", unparsed);
+        }
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var response = new SyncQueueResponse
         {
@@ -115,10 +127,29 @@ public class SyncQueueController : ControllerBase
             RetentionCutoff = RetentionMath.CutoffFor(KofinSyncQueuePlugin.RetentionDays, now),
         };
 
+        var learned = new List<ItemRec>();
+        var orphaned = new List<Guid>();
+        var foreign = 0;
+
         foreach (var record in _store.ItemsSince(since.Value))
         {
             if (include is not null && !include.Contains(record.MediaType))
             {
+                continue;
+            }
+
+            // Removals are never library-filtered. They cost the client two
+            // indexed local lookups rather than a round trip, so there is
+            // nothing to save, and a removal dropped in error leaves a row
+            // orphaned in the client's database with no watermark that would
+            // ever bring it back. The weakest signal, the worst failure.
+            var scoped = record.Status != ItemStatus.Removed;
+
+            // Ahead of the projection: a record for a library the caller does
+            // not sync costs neither an item load nor an Etag.
+            if (scoped && !LibrariesFilter.Matches(record.LibraryIds, libraryFilter))
+            {
+                foreign++;
                 continue;
             }
 
@@ -136,7 +167,14 @@ public class SyncQueueController : ControllerBase
                 // Query time, not event time: an event storm on one item
                 // coalesces into a single current-state comparison, and the
                 // string is byte-identical to the DTO Etag clients store.
-                return new ItemResolution(true, item.GetEtag(user));
+                var etag = item.GetEtag(user);
+
+                if (record.LibraryIds is not null)
+                {
+                    return new ItemResolution(true, etag);
+                }
+
+                return Learn(record, item, etag, learned, orphaned);
             });
 
             if (projected is null)
@@ -144,7 +182,24 @@ public class SyncQueueController : ControllerBase
                 continue;
             }
 
+            // A record that only just learned its libraries has not met the
+            // filter yet.
+            if (scoped && !LibrariesFilter.Matches(record.LibraryIds, libraryFilter))
+            {
+                foreign++;
+                continue;
+            }
+
             response.Items.Add(projected);
+        }
+
+        _store.BackfillLibraries(learned);
+
+        if (orphaned.Count > 0)
+        {
+            _logger.LogInformation(
+                "Dropped {Count} records for items whose library no longer exists",
+                _store.DeleteItems(orphaned));
         }
 
         foreach (var record in _store.UserDataSince(since.Value, userId))
@@ -163,11 +218,56 @@ public class SyncQueueController : ControllerBase
         }
 
         _logger.LogInformation(
-            "SyncQueue since {Since}: {Items} records, {UserData} user-data changes",
+            "SyncQueue since {Since}: {Items} records, {UserData} user-data changes, {Foreign} outside the caller's libraries",
             since.Value,
             response.Items.Count,
-            response.UserData.Count);
+            response.UserData.Count,
+            foreign);
 
         return response;
+    }
+
+    /// <summary>
+    /// Resolve the libraries of a record stored before the dimension existed,
+    /// and decide what its answer means. This is also what unmasks the ghosts:
+    /// removing a Jellyfin library deletes the .mblink directory and fires no
+    /// per-item event, so its items stay in the item database, still load and
+    /// still pass the visibility check — but they belong to no collection
+    /// folder any more, and every client has been failing them ever since.
+    /// </summary>
+    private ItemResolution Learn(
+        ItemRec record,
+        BaseItem item,
+        string? etag,
+        List<ItemRec> learned,
+        List<Guid> orphaned)
+    {
+        // A boxset would resolve to the Collections library, which no client
+        // whitelists — stamping it would have them discard every collection.
+        if (ItemClassifier.IsCrossLibrary(record.ItemType))
+        {
+            return new ItemResolution(true, etag);
+        }
+
+        var resolved = _libraryManager.GetCollectionFolders(item)
+            .Select(folder => folder.Id)
+            .ToList();
+
+        if (resolved.Count > 0)
+        {
+            record.LibraryIds = resolved;
+            learned.Add(record);
+            return new ItemResolution(true, etag, resolved);
+        }
+
+        // Kinds that legitimately have no library are not evidence of
+        // anything; anything else with no library is a ghost.
+        if (ItemClassifier.MayLackLibrary(record.ItemType))
+        {
+            return new ItemResolution(true, etag);
+        }
+
+        orphaned.Add(record.ItemId);
+        return new ItemResolution(false, null);
     }
 }

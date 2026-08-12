@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
@@ -132,6 +133,91 @@ public sealed class SyncStoreTests : IDisposable
 
         var record = Assert.Single(_store.ItemsSince(0));
         Assert.Equal(seriesId, record.SeriesId);
+    }
+
+    [Fact]
+    public void LibraryIdsRoundTripThroughLiteDb()
+    {
+        // LiteDB maps the POCO as-is, and a collection type it cannot
+        // instantiate fails here rather than in production.
+        var id = Guid.NewGuid();
+        var libraries = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var itemEvent = Event(id, ItemStatus.Added, 100);
+        itemEvent.LibraryIds = libraries;
+
+        _store.RecordItemEvents(new[] { itemEvent });
+
+        var record = Assert.Single(_store.ItemsSince(0));
+        Assert.Equal(libraries, record.LibraryIds);
+    }
+
+    [Fact]
+    public void ARecordStoredBeforeTheDimensionReadsBackUnknown()
+    {
+        var id = Guid.NewGuid();
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
+
+        var record = Assert.Single(_store.ItemsSince(0));
+        Assert.Null(record.LibraryIds);
+    }
+
+    [Fact]
+    public void BackfilledLibrariesPersist()
+    {
+        var id = Guid.NewGuid();
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
+
+        var record = Assert.Single(_store.ItemsSince(0));
+        record.LibraryIds = new List<Guid> { Guid.NewGuid() };
+        _store.BackfillLibraries(new[] { record });
+
+        Assert.Equal(record.LibraryIds, Assert.Single(_store.ItemsSince(0)).LibraryIds);
+    }
+
+    [Fact]
+    public void DeadLibraryRecordsAreReapedAndTheRestAreLeftAlone()
+    {
+        var live = Guid.NewGuid();
+        var deleted = Guid.NewGuid();
+
+        var kept = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        kept.LibraryIds = new List<Guid> { live };
+
+        var ghost = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        ghost.LibraryIds = new List<Guid> { deleted };
+
+        // One foot in each: still reachable, so still wanted.
+        var straddling = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        straddling.LibraryIds = new List<Guid> { deleted, live };
+
+        var unknown = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+
+        _store.RecordItemEvents(new[] { kept, ghost, straddling, unknown });
+
+        var reaped = _store.DeleteWithDeadLibraries(new HashSet<Guid> { live });
+
+        Assert.Equal(1, reaped);
+        var remaining = _store.ItemsSince(0).Select(x => x.ItemId).ToHashSet();
+        Assert.DoesNotContain(ghost.ItemId, remaining);
+        Assert.Contains(kept.ItemId, remaining);
+        Assert.Contains(straddling.ItemId, remaining);
+        // Unknown is never evidence of a deleted library.
+        Assert.Contains(unknown.ItemId, remaining);
+    }
+
+    [Fact]
+    public void DeleteItemsDropsExactlyTheNamedRecords()
+    {
+        var doomed = Guid.NewGuid();
+        var spared = Guid.NewGuid();
+        _store.RecordItemEvents(new[]
+        {
+            Event(doomed, ItemStatus.Added, 100),
+            Event(spared, ItemStatus.Added, 100),
+        });
+
+        Assert.Equal(1, _store.DeleteItems(new[] { doomed }));
+        Assert.Equal(spared, Assert.Single(_store.ItemsSince(0)).ItemId);
     }
 
     [Fact]

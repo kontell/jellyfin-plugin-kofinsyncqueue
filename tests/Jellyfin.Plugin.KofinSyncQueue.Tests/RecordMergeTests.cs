@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
 using Xunit;
 
@@ -87,5 +88,52 @@ public class RecordMergeTests
         var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, ts: 500));
 
         Assert.Equal(seriesId, merged.SeriesId);
+    }
+
+    [Fact]
+    public void LibraryIdsSurviveEventsThatOmitThem()
+    {
+        var library = Guid.NewGuid();
+        var withLibrary = Event(ItemStatus.Added);
+        withLibrary.LibraryIds = new List<Guid> { library };
+
+        var first = RecordMerge.Apply(null, withLibrary);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, ts: 500));
+
+        Assert.Equal(new[] { library }, merged.LibraryIds);
+    }
+
+    [Fact]
+    public void RemovedInheritsTheLibraryItCanNoLongerResolve()
+    {
+        // The load-bearing case: DeleteItem clears the item's parent before
+        // the event fires, so a removal can arrive knowing nothing. It must
+        // still be attributable, or clients cannot scope removals at all.
+        var library = Guid.NewGuid();
+        var added = Event(ItemStatus.Added);
+        added.LibraryIds = new List<Guid> { library };
+
+        var first = RecordMerge.Apply(null, added);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Removed, ts: 900));
+
+        Assert.Equal(ItemStatus.Removed, merged.Status);
+        Assert.Equal(new[] { library }, merged.LibraryIds);
+    }
+
+    [Fact]
+    public void ARehomedItemTakesItsNewLibrary()
+    {
+        var before = Guid.NewGuid();
+        var after = Guid.NewGuid();
+
+        var first = Event(ItemStatus.Added);
+        first.LibraryIds = new List<Guid> { before };
+
+        var second = Event(ItemStatus.Updated, ts: 600);
+        second.LibraryIds = new List<Guid> { after };
+
+        var merged = RecordMerge.Apply(RecordMerge.Apply(null, first), second);
+
+        Assert.Equal(new[] { after }, merged.LibraryIds);
     }
 }

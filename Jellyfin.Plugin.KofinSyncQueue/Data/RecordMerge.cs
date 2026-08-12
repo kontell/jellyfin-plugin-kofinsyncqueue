@@ -26,6 +26,11 @@ public static class RecordMerge
             LastModified = incoming.Timestamp,
             SeriesId = incoming.SeriesId ?? existing?.SeriesId,
             SeasonId = incoming.SeasonId ?? existing?.SeasonId,
+            // Sticky for the same reason the parent ids are, and load-bearing
+            // for removals: by the time ItemRemoved fires the parent chain can
+            // already be gone, so the removal contributes null and inherits the
+            // library the Added record resolved.
+            LibraryIds = incoming.LibraryIds ?? existing?.LibraryIds,
         };
 
         if (incoming.Status == ItemStatus.Removed)

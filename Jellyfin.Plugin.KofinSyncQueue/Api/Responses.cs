@@ -23,6 +23,15 @@ public class SyncInfoResponse
 
     /// <summary>Gets or sets the configured retention days (0 = keep forever).</summary>
     public int RetentionDays { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional capabilities this server has on top of the
+    /// protocol version. Additive by design: clients require an exact
+    /// <see cref="ProtocolVersion"/> match, so a bump would demote every
+    /// deployed client to the legacy plugin. Features are opted into by
+    /// presence instead, and an old client simply ignores the list.
+    /// </summary>
+    public IReadOnlyList<string> Features { get; set; } = new[] { "library-scope" };
 }
 
 /// <summary>
@@ -56,6 +65,13 @@ public class SyncQueueItem
 
     /// <summary>Gets or sets the season id for episodes ("N" format).</summary>
     public string? SeasonId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the collection folders the item belongs to ("N" format) —
+    /// the ids clients whitelist. Absent means unknown, never "belongs to
+    /// nothing": drop a record only when this is present and matches nothing.
+    /// </summary>
+    public IReadOnlyList<string>? LibraryIds { get; set; }
 }
 
 /// <summary>

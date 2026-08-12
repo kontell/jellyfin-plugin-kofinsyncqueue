@@ -42,4 +42,29 @@ public static class ItemClassifier
 
         return true;
     }
+
+    /// <summary>
+    /// Whether the kind aggregates across libraries rather than living in
+    /// one. A BoxSet sits in the Collections library, which no client
+    /// whitelists — stamping that id on the record would have clients
+    /// discard every boxset as foreign, so boxsets carry no library at all.
+    /// </summary>
+    /// <param name="itemType">The client type name.</param>
+    /// <returns>Whether to leave the record's libraries unset.</returns>
+    public static bool IsCrossLibrary(string itemType)
+        => string.Equals(itemType, "BoxSet", System.StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether resolving no library for the kind is ordinary rather than
+    /// evidence that its library was deleted. Adds MusicArtist to the above:
+    /// artists are server-global, and a metadata-only one has no folder to
+    /// resolve — which is exactly why clients resolve them through their
+    /// content instead. Getting this wrong drops real items, so it errs
+    /// towards leaving records alone.
+    /// </summary>
+    /// <param name="itemType">The client type name.</param>
+    /// <returns>Whether an empty resolution is expected for this kind.</returns>
+    public static bool MayLackLibrary(string itemType)
+        => IsCrossLibrary(itemType)
+            || string.Equals(itemType, "MusicArtist", System.StringComparison.Ordinal);
 }

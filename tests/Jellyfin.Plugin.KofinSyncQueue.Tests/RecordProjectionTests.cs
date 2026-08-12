@@ -156,4 +156,78 @@ public class RecordProjectionTests
         Assert.Null(item!.SeriesId);
         Assert.Null(item.SeasonId);
     }
+
+    [Fact]
+    public void LibraryIdsRenderInDashlessNFormat()
+    {
+        var record = Record(ItemStatus.Added);
+        var library = Guid.NewGuid();
+        record.LibraryIds = new List<Guid> { library };
+
+        var item = RecordProjection.Project(record, _ => new ItemResolution(true, "e"));
+
+        Assert.NotNull(item);
+        Assert.Equal(new[] { library.ToString("N") }, item!.LibraryIds);
+    }
+
+    [Fact]
+    public void UnknownLibrariesStayNullNeverAnEmptyArray()
+    {
+        // The serializer omits nulls and happily writes []. Absent has to
+        // mean "we do not know" on the wire, so an empty answer is null.
+        var fromRecord = RecordProjection.Project(
+            Record(ItemStatus.Added),
+            _ => new ItemResolution(true, "e"));
+
+        var fromResolution = RecordProjection.Project(
+            Record(ItemStatus.Added),
+            _ => new ItemResolution(true, "e", new List<Guid>()));
+
+        Assert.Null(fromRecord!.LibraryIds);
+        Assert.Null(fromResolution!.LibraryIds);
+    }
+
+    [Fact]
+    public void APreDimensionRecordLearnsItsLibrariesAtQueryTime()
+    {
+        var library = Guid.NewGuid();
+
+        var item = RecordProjection.Project(
+            Record(ItemStatus.Added),
+            _ => new ItemResolution(true, "e", new List<Guid> { library }));
+
+        Assert.NotNull(item);
+        Assert.Equal(new[] { library.ToString("N") }, item!.LibraryIds);
+    }
+
+    [Fact]
+    public void AStoredLibraryBeatsTheQueryTimeOne()
+    {
+        // Capture time is the authority: it is the only reading taken while
+        // a removed item could still be resolved.
+        var stored = Guid.NewGuid();
+        var record = Record(ItemStatus.Updated);
+        record.LibraryIds = new List<Guid> { stored };
+
+        var item = RecordProjection.Project(
+            record,
+            _ => new ItemResolution(true, "e", new List<Guid> { Guid.NewGuid() }));
+
+        Assert.Equal(new[] { stored.ToString("N") }, item!.LibraryIds);
+    }
+
+    [Fact]
+    public void RemovedRecordsCarryTheirStoredLibrariesWithoutLoadingAnything()
+    {
+        var library = Guid.NewGuid();
+        var record = Record(ItemStatus.Removed);
+        record.LibraryIds = new List<Guid> { library };
+
+        var item = RecordProjection.Project(
+            record,
+            _ => throw new InvalidOperationException("removed records never resolve"));
+
+        Assert.NotNull(item);
+        Assert.Equal(new[] { library.ToString("N") }, item!.LibraryIds);
+    }
 }
