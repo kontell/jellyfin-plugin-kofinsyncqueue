@@ -21,8 +21,6 @@ description="$(sed -n 's/^description: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 # getting "" for it, which is what an empty release note in the Jellyfin plugin
 # catalogue was: a field nobody wrote, not a field nobody wanted.
 
-mkdir -p "$(dirname "$out")"  # Create output directory if it doesn't exist
-
 changelog="$(awk '
     /^changelog:[[:space:]]*\|-?[[:space:]]*$/ { flag = 1; next }
     flag && /^[^[:space:]]/ { exit }
@@ -55,7 +53,10 @@ cat > "$work/meta.json" <<EOF
 }
 EOF
 
+# Absolute, because the zip below runs from "$work": a relative "$out" (CI
+# passes "dist") would resolve against the temp dir, not the repo.
 mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 zip_path="$out/kofin-sync-queue_$version.zip"
 rm -f "$zip_path"
 (cd "$work" && zip -q -r "$zip_path" .)
