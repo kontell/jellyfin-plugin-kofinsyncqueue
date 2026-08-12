@@ -16,6 +16,18 @@ owner="$(sed -n 's/^owner: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 overview="$(sed -n 's/^overview: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 description="$(sed -n 's/^description: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 
+# The changelog block, flattened to one JSON string. repository.kontell's
+# generate_jellyfin_repo.py already reads meta.json's "changelog" and has been
+# getting "" for it, which is what an empty release note in the Jellyfin plugin
+# catalogue was: a field nobody wrote, not a field nobody wanted.
+changelog="$(awk '
+    /^changelog:[[:space:]]*\|-?[[:space:]]*$/ { flag = 1; next }
+    flag && /^[^[:space:]]/ { exit }
+    flag { sub(/^  /, ""); print }
+' "$repo/build.yaml" \
+    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+    | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }')"
+
 dotnet publish "$proj" -c Release -o "$stage"
 
 work="$(mktemp -d)"
@@ -34,6 +46,7 @@ cat > "$work/meta.json" <<EOF
     "targetAbi": "$target_abi",
     "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "version": "$version",
+    "changelog": "$changelog",
     "status": "Active",
     "autoUpdate": false
 }

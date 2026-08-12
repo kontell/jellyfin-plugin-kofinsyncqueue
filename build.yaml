@@ -1,6 +1,10 @@
 name: "Kofin Sync Queue"
 guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
-version: 1
+# Tracks the Jellyfin ABI it is built against: <server major.minor>.0.<build>.
+# The authority is the csproj's AssemblyVersion, which is what tools/package.sh
+# reads to name the zip and stamp meta.json; this is here so the two are read
+# together rather than drifting apart unnoticed.
+version: "10.11.0.1"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
@@ -11,4 +15,14 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Initial release: /Kofin/SyncQueue protocol v1
+  - Records carry the libraries they belong to, and the feed can be filtered
+    to them, so a client no longer fetches changes from libraries it does not
+    sync. Announced as "library-scope" in the Info response's Features list.
+  - Records left behind by a deleted library are reaped rather than served
+    until the retention cutoff.
+  - Version numbers now track the Jellyfin ABI (10.11.x), so which server a
+    build targets is readable from the version alone.
+  - Releases are built and drafted by CI, and announced to the Kontell
+    repository on publish.
+  - The plugin catalogue shows these notes: meta.json carries the changelog
+    the repository manifest has been serving empty until now.
