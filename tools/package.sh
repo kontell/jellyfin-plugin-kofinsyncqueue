@@ -21,7 +21,7 @@ description="$(sed -n 's/^description: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 # getting "" for it, which is what an empty release note in the Jellyfin plugin
 # catalogue was: a field nobody wrote, not a field nobody wanted.
 
-mkdir -p "${1:-.}"  # Create output directory if it doesn't exist
+mkdir -p "$(dirname "$out")"  # Create output directory if it doesn't exist
 
 changelog="$(awk '
     /^changelog:[[:space:]]*\|-?[[:space:]]*$/ { flag = 1; next }
