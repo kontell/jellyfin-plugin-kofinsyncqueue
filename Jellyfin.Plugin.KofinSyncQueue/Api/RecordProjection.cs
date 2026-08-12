@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
 using MediaBrowser.Controller.Library;
 
@@ -11,7 +13,8 @@ namespace Jellyfin.Plugin.KofinSyncQueue.Api;
 /// </summary>
 /// <param name="Visible">Whether the item exists and the caller may see it.</param>
 /// <param name="Etag">The item's current Etag; ignored when not visible.</param>
-public readonly record struct ItemResolution(bool Visible, string? Etag);
+/// <param name="LibraryIds">The item's collection folders, for records stored before the dimension existed; null when the record already knows or nothing resolved.</param>
+public readonly record struct ItemResolution(bool Visible, string? Etag, List<Guid>? LibraryIds = null);
 
 /// <summary>
 /// Turns a stored record into a response item. BaseItem-free — the live
@@ -33,6 +36,7 @@ public static class RecordProjection
         ArgumentNullException.ThrowIfNull(resolve);
 
         string? etag = null;
+        var libraries = record.LibraryIds;
 
         if (record.Status != ItemStatus.Removed)
         {
@@ -46,6 +50,10 @@ public static class RecordProjection
             }
 
             etag = resolution.Etag;
+
+            // Pre-v1.1 records learn their libraries from the live item; the
+            // caller is what persists the answer, so it is learned once.
+            libraries ??= resolution.LibraryIds;
         }
 
         return new SyncQueueItem
@@ -61,6 +69,9 @@ public static class RecordProjection
             Etag = etag,
             SeriesId = record.SeriesId?.ToString("N", CultureInfo.InvariantCulture),
             SeasonId = record.SeasonId?.ToString("N", CultureInfo.InvariantCulture),
+            LibraryIds = libraries is { Count: > 0 }
+                ? libraries.Select(id => id.ToString("N", CultureInfo.InvariantCulture)).ToArray()
+                : null,
         };
     }
 }

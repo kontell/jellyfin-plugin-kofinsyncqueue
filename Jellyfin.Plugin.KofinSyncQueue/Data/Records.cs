@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Jellyfin.Plugin.KofinSyncQueue.Data;
 
@@ -46,6 +47,15 @@ public class ItemRec
 
     /// <summary>Gets or sets the season id for episodes.</summary>
     public Guid? SeasonId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the collection folders the item belongs to — the ids
+    /// clients whitelist. Null means unknown (a pre-v1.1 record, or an item
+    /// whose parent chain was already gone when the event fired); it never
+    /// means "belongs to nothing", which is why an empty result is stored
+    /// as null. A list because a path under two libraries is in both.
+    /// </summary>
+    public List<Guid>? LibraryIds { get; set; }
 }
 
 /// <summary>
@@ -99,6 +109,9 @@ public class ItemEvent
 
     /// <summary>Gets or sets the season id for episodes.</summary>
     public Guid? SeasonId { get; set; }
+
+    /// <summary>Gets or sets the collection folders the item belongs to; null when unresolvable.</summary>
+    public List<Guid>? LibraryIds { get; set; }
 
     /// <summary>Gets or sets the event capture time, unix seconds.</summary>
     public long Timestamp { get; set; }
