@@ -15,8 +15,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Data" Version="10.*-*" />
-    <PackageReference Include="Jellyfin.Controller" Version="10.*-*" />
+    <!-- Pin to the OLDEST supported 10.11 patch, and do NOT float. .NET binds
+         an assembly reference upward but never downward, so a float resolves to
+         whatever was newest on build day and produces a plugin that earlier
+         10.11.x servers refuse to load ("references an incompatible version of
+         one of the shared libraries"). Verified in the syncplayv2 M0 spike:
+         a build against 10.11.11 was rejected by a 10.11.7 server. -->
+    <PackageReference Include="Jellyfin.Data" Version="[10.11.0]" />
+    <PackageReference Include="Jellyfin.Controller" Version="[10.11.0]" />
     <PackageReference Include="LiteDB" Version="5.0.15" />
   </ItemGroup>
 
