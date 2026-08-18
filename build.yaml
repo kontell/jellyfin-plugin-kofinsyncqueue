@@ -1,9 +1,19 @@
 name: "Kofin Sync Queue"
 guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
-# Tracks the Jellyfin ABI it is built against: <server major.minor>.0.<build>.
-# The authority is the csproj's AssemblyVersion, which is what tools/package.sh
-# reads to name the zip and stamp meta.json; this is here so the two are read
-# together rather than drifting apart unnoticed.
+# The PRIMARY ABI row. One source tree is built against several Jellyfin ABIs
+# (the matrix is in .github/workflows/abis.yml); these three describe the lowest
+# one, and are what a bare `tools/package.sh` produces. Every other row
+# overrides them through the environment.
+#
+# version tracks the Jellyfin ABI it is built against: <server major.minor>.0.<build>.
+# The <build> component is shared by every row, so the same source ships as
+# 10.11.0.N and 12.0.0.N and a v12 server ranks the v12 zip highest — the only
+# thing stopping it installing the 10.11 one, since Jellyfin treats targetAbi as
+# a floor (jellyfin#11331, closed Not A Bug).
+#
+# The authority is the csproj's PluginVersion, which is what tools/package.sh
+# reads to name the zip and stamp meta.json; the value here is documentation and
+# is asserted against it at release time.
 version: "10.11.0.1"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
