@@ -14,7 +14,7 @@ guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
 # The authority is the csproj's PluginVersion, which is what tools/package.sh
 # reads to name the zip and stamp meta.json; the value here is documentation and
 # is asserted against it at release time.
-version: "10.11.0.2"
+version: "10.11.0.3"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
@@ -29,19 +29,24 @@ category: "General"
 #             Dashboard -> Plugins tile of an installed plugin shows. The
 #             server refuses a path that escapes the plugin folder, so this is
 #             a bare filename.
+#
+#             Keep the artwork inset in the canvas -- 600x600 with the mark
+#             about 420 wide. jellyfin-web scales the image to the tile and
+#             adds no margin of its own, so art that reaches its own edges
+#             reaches the edges of the tile and reads as overflowing it.
 #   imageUrl  the copy the *catalogue* shows, before anything is installed:
 #             repository.kontell's generate_jellyfin_repo.py copies it out of
-#             meta.json into manifest.json, where it has been reading "" until
-#             now. It has to be reachable by a server that does not have the
-#             plugin yet, so it cannot come out of the zip.
+#             meta.json into manifest.json. It has to be reachable by a server
+#             that does not have the plugin yet, so it cannot come out of the
+#             zip -- and because it is served from main rather than from a
+#             release, a logo fix reaches the catalogue as soon as it merges
+#             and the installed tile only at the next release.
 image: "logo.png"
 imageUrl: "https://raw.githubusercontent.com/kontell/jellyfin-plugin-kofinsyncqueue/main/logo.png"
 artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Built for Jellyfin 12.0 as well as 10.11, from one source tree: the release
-    carries a zip per server line, each declaring its own targetAbi, and a
-    server installs the newest one it can run.
-  - The plugin has a logo. The catalogue entry and the installed plugin's tile
-    show the Kofin mark instead of a blank placeholder.
+  - The logo sits inside its tile instead of running to the edges: the mark now
+    has a 600x600 transparent canvas around it, which is the margin Jellyfin's
+    plugin cards assume the image brings with it.

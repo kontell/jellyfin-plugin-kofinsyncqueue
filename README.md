@@ -12,7 +12,7 @@ Both endpoints are authorized; the user is derived from the access token — no 
 
 ```
 GET /Kofin/SyncQueue/Info
-→ { "PluginVersion": "10.11.0.2", "ProtocolVersion": 1,
+→ { "PluginVersion": "10.11.0.3", "ProtocolVersion": 1,
     "ServerTime": <unix>, "RetentionCutoff": <unix|0>, "RetentionDays": 90,
     "Features": ["library-scope"] }
 
@@ -72,8 +72,8 @@ Add the Kontell plugin repository, then install from the catalog — Jellyfin un
 Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
-sudo unzip kofin-sync-queue_10.11.0.2.zip \
-    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.2"
-sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.2"
+sudo unzip kofin-sync-queue_10.11.0.3.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.3"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.3"
 sudo systemctl restart jellyfin
 ```
