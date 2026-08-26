@@ -14,25 +14,34 @@ guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
 # The authority is the csproj's PluginVersion, which is what tools/package.sh
 # reads to name the zip and stamp meta.json; the value here is documentation and
 # is asserted against it at release time.
-version: "10.11.0.1"
+version: "10.11.0.2"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
 overview: "Typed change queue for the Kofin Kodi client"
 description: "Companion plugin for plugin.video.kofin: records library and user-data changes as typed records (change reason, series/season parents), serves them with query-time Etags and an in-band retention cutoff, so offline Kodi boxes catch up with minimal traffic."
 category: "General"
+# The logo, in the two places Jellyfin looks for one.
+#
+#   image     a file inside the zip, written to meta.json as "imagePath".
+#             Jellyfin resolves it against the *installed plugin folder* and
+#             serves it from /Plugins/{guid}/{version}/Image, which is what the
+#             Dashboard -> Plugins tile of an installed plugin shows. The
+#             server refuses a path that escapes the plugin folder, so this is
+#             a bare filename.
+#   imageUrl  the copy the *catalogue* shows, before anything is installed:
+#             repository.kontell's generate_jellyfin_repo.py copies it out of
+#             meta.json into manifest.json, where it has been reading "" until
+#             now. It has to be reachable by a server that does not have the
+#             plugin yet, so it cannot come out of the zip.
+image: "logo.png"
+imageUrl: "https://raw.githubusercontent.com/kontell/jellyfin-plugin-kofinsyncqueue/main/logo.png"
 artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Records carry the libraries they belong to, and the feed can be filtered
-    to them, so a client no longer fetches changes from libraries it does not
-    sync. Announced as "library-scope" in the Info response's Features list.
-  - Records left behind by a deleted library are reaped rather than served
-    until the retention cutoff.
-  - Version numbers now track the Jellyfin ABI (10.11.x), so which server a
-    build targets is readable from the version alone.
-  - Releases are built and drafted by CI, and announced to the Kontell
-    repository on publish.
-  - The plugin catalogue shows these notes: meta.json carries the changelog
-    the repository manifest has been serving empty until now.
+  - Built for Jellyfin 12.0 as well as 10.11, from one source tree: the release
+    carries a zip per server line, each declaring its own targetAbi, and a
+    server installs the newest one it can run.
+  - The plugin has a logo. The catalogue entry and the installed plugin's tile
+    show the Kofin mark instead of a blank placeholder.

@@ -94,6 +94,10 @@ jobs:
       # Jellyfin server reads to decide whether it can run this build. A zip
       # claiming the wrong floor is the one error the manifest cannot correct,
       # so it is asserted here as well as at release time.
+      #
+      # imagePath is checked in the same breath because the server does not
+      # complain about a broken one: it 404s /Plugins/{id}/{version}/Image and
+      # renders the same blank tile a plugin with no logo gets.
       - name: Assert the zip declares this row's floor
         shell: bash
         run: |
@@ -108,6 +112,11 @@ jobs:
             || { echo "meta.json targetAbi $abi != ${{ matrix.row.targetAbi }}" >&2; exit 1; }
           [[ "$version" == ${{ matrix.row.base }}.* ]] \
             || { echo "version $version is not on base ${{ matrix.row.base }}" >&2; exit 1; }
+          image="$(unzip -p "$zip" meta.json | jq -r '.imagePath // ""')"
+          [[ -n "$image" ]] || { echo "meta.json names no imagePath" >&2; exit 1; }
+          unzip -l "$zip" | grep -q " $image\$" \
+            || { echo "imagePath $image is not in the zip" >&2; exit 1; }
+          echo "image: $image"
 
       # Named for the run, not for the release: a PR zip must not be mistakable
       # for a published asset, which is what repository.kontell's asset_glob

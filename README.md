@@ -4,7 +4,7 @@ Jellyfin server plugin: a **typed change queue** for the Kofin Kodi client ([`pl
 
 Clean-room implementation (GPL-3). It coexists with the official KodiSyncQueue plugin: stock jellyfin-kodi clients keep using that one; Kofin clients probe for this plugin first and fall back to the official protocol when it is absent.
 
-Requires Jellyfin **10.11+** (`targetAbi 10.11.0.0`).
+Requires Jellyfin **10.11+**. One source tree ships to both server lines: every release carries a `10.11.0.N` zip (`targetAbi 10.11.0.0`, net9.0) and a `12.0.0.N` zip (`targetAbi 12.0.0.0`, net10.0), and a server installs the newest one it can run — Jellyfin reads `targetAbi` as a floor, so the build numbers move in lockstep to keep a v12 server off the 10.11 build. The supported lines are defined in one place, [`.github/workflows/abis.yml`](.github/workflows/abis.yml), which both the PR gate and the release workflow read.
 
 ## Protocol v1
 
@@ -12,7 +12,7 @@ Both endpoints are authorized; the user is derived from the access token — no 
 
 ```
 GET /Kofin/SyncQueue/Info
-→ { "PluginVersion": "10.11.0.1", "ProtocolVersion": 1,
+→ { "PluginVersion": "10.11.0.2", "ProtocolVersion": 1,
     "ServerTime": <unix>, "RetentionCutoff": <unix|0>, "RetentionDays": 90,
     "Features": ["library-scope"] }
 
@@ -55,6 +55,13 @@ dotnet publish Jellyfin.Plugin.KofinSyncQueue -c Release
 tools/package.sh            # → dist/kofin-sync-queue_<version>.zip
 ```
 
+A bare `tools/package.sh` builds the primary row (10.11) described in `build.yaml`. Any other row is four environment variables, which is all the build matrix passes it:
+
+```
+ABI_BASE=12.0.0 TARGET_ABI=12.0.0.0 FRAMEWORK=net10.0 JELLYFIN_VERSION=12.0.0-rc5 \
+    tools/package.sh        # → dist/kofin-sync-queue_12.0.0.<build>.zip
+```
+
 ## Install
 
 Add the Kontell plugin repository, then install from the catalog — Jellyfin unpacks the plugin into the right place (with the right ownership) itself:
@@ -65,8 +72,8 @@ Add the Kontell plugin repository, then install from the catalog — Jellyfin un
 Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
-sudo unzip kofin-sync-queue_10.11.0.1.zip \
-    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.1"
-sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.1"
+sudo unzip kofin-sync-queue_10.11.0.2.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.2"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.2"
 sudo systemctl restart jellyfin
 ```
