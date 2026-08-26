@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the Jellyfin-installable zip: the two artifacts named in build.yaml
-# plus the meta.json the server reads at load time. Output: dist/.
+# Build the Jellyfin-installable zip: the two artifacts named in build.yaml,
+# the logo, plus the meta.json the server reads at load time. Output: dist/.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,6 +31,8 @@ target_abi="${TARGET_ABI:-$(sed -n 's/^targetAbi: *"\(.*\)"/\1/p' "$repo/build.y
 owner="$(sed -n 's/^owner: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 overview="$(sed -n 's/^overview: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 description="$(sed -n 's/^description: *"\(.*\)"/\1/p' "$repo/build.yaml")"
+image="$(sed -n 's/^image: *"\(.*\)"/\1/p' "$repo/build.yaml")"
+image_url="$(sed -n 's/^imageUrl: *"\(.*\)"/\1/p' "$repo/build.yaml")"
 
 # The changelog block, flattened to one JSON string. repository.kontell's
 # generate_jellyfin_repo.py already reads meta.json's "changelog" and has been
@@ -57,6 +59,15 @@ trap 'rm -rf "$work"' EXIT
 
 cp "$stage/Jellyfin.Plugin.KofinSyncQueue.dll" "$stage/LiteDB.dll" "$work/"
 
+# The logo travels inside the zip, because Jellyfin serves the installed
+# plugin's image off disk from the plugin's own folder. Fail rather than ship a
+# meta.json whose imagePath points at nothing: the server answers that with a
+# silent 404 and a blank tile, which looks exactly like having no logo at all.
+if [ -n "$image" ]; then
+    [ -f "$repo/$image" ] || { echo "build.yaml names image $image, which does not exist" >&2; exit 1; }
+    cp "$repo/$image" "$work/"
+fi
+
 cat > "$work/meta.json" <<EOF
 {
     "category": "General",
@@ -65,6 +76,8 @@ cat > "$work/meta.json" <<EOF
     "overview": "$overview",
     "description": "$description",
     "owner": "$owner",
+    "imagePath": "$image",
+    "imageUrl": "$image_url",
     "targetAbi": "$target_abi",
     "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
     "version": "$version",

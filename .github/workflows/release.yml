@@ -113,7 +113,8 @@ jobs:
       # (addons.toml) and rejects a zip with no meta.json at its root. Both are
       # cheaper to catch here than in the publish run of another repository.
       # It must also carry the row's own targetAbi — a zip that claims the wrong
-      # floor is the one failure the manifest cannot correct.
+      # floor is the one failure the manifest cannot correct — and the logo its
+      # imagePath names, which the server 404s in silence when it is missing.
       - name: Assert the zip is one repository.kontell will accept
         shell: bash
         run: |
@@ -125,6 +126,10 @@ jobs:
           abi="$(unzip -p "$zip" meta.json | jq -r .targetAbi)"
           [[ "$abi" == "${{ matrix.row.targetAbi }}" ]] \
             || { echo "meta.json targetAbi $abi != ${{ matrix.row.targetAbi }}" >&2; exit 1; }
+          image="$(unzip -p "$zip" meta.json | jq -r '.imagePath // ""')"
+          [[ -n "$image" ]] || { echo "meta.json names no imagePath" >&2; exit 1; }
+          unzip -l "$zip" | grep -q " $image\$" \
+            || { echo "imagePath $image is not in the zip" >&2; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
