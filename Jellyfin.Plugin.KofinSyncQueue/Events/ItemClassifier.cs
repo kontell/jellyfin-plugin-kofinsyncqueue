@@ -4,8 +4,8 @@ using MediaBrowser.Model.Entities;
 namespace Jellyfin.Plugin.KofinSyncQueue.Events;
 
 /// <summary>
-/// Which items the queue records, and how they classify. Exactly the nine
-/// kinds the Kofin client syncs; virtual and non-library items are noise.
+/// Which items the queue records, and how they classify. The nine library
+/// kinds plus playlists; virtual and non-library items are noise.
 /// </summary>
 public static class ItemClassifier
 {
@@ -27,6 +27,7 @@ public static class ItemClassifier
             "BoxSet" => "boxsets",
             "MusicVideo" => "musicvideos",
             "MusicAlbum" or "MusicArtist" or "Audio" => "music",
+            "Playlist" => "playlists",
             _ => string.Empty,
         };
 
@@ -48,11 +49,13 @@ public static class ItemClassifier
     /// one. A BoxSet sits in the Collections library, which no client
     /// whitelists — stamping that id on the record would have clients
     /// discard every boxset as foreign, so boxsets carry no library at all.
+    /// Playlists live in Jellyfin's Playlists folder for the same reason.
     /// </summary>
     /// <param name="itemType">The client type name.</param>
     /// <returns>Whether to leave the record's libraries unset.</returns>
     public static bool IsCrossLibrary(string itemType)
-        => string.Equals(itemType, "BoxSet", System.StringComparison.Ordinal);
+        => string.Equals(itemType, "BoxSet", System.StringComparison.Ordinal)
+            || string.Equals(itemType, "Playlist", System.StringComparison.Ordinal);
 
     /// <summary>
     /// Whether resolving no library for the kind is ordinary rather than

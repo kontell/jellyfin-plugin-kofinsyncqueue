@@ -14,7 +14,7 @@ guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
 # The authority is the csproj's PluginVersion, which is what tools/package.sh
 # reads to name the zip and stamp meta.json; the value here is documentation and
 # is asserted against it at release time.
-version: "10.11.0.3"
+version: "10.11.0.4"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
@@ -47,6 +47,6 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - The logo sits inside its tile instead of running to the edges: the mark now
-    has a 600x600 transparent canvas around it, which is the margin Jellyfin's
-    plugin cards assume the image brings with it.
+  - Playlists are a recorded type (`playlists` / `Playlist`), library-agnostic
+    like boxsets, advertised in Features so a client can ask for them without a
+    protocol bump.

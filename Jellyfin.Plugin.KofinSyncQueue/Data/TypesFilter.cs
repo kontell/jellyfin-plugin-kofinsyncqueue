@@ -19,6 +19,7 @@ public static class TypesFilter
         "boxsets",
         "musicvideos",
         "music",
+        "playlists",
     };
 
     /// <summary>
