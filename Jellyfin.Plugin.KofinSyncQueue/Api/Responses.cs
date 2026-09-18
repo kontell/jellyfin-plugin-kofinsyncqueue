@@ -31,7 +31,7 @@ public class SyncInfoResponse
     /// deployed client to the legacy plugin. Features are opted into by
     /// presence instead, and an old client simply ignores the list.
     /// </summary>
-    public IReadOnlyList<string> Features { get; set; } = new[] { "library-scope" };
+    public IReadOnlyList<string> Features { get; set; } = new[] { "library-scope", "playlists" };
 }
 
 /// <summary>

@@ -16,7 +16,7 @@
          row, so a v12 server ranks the v12 zip above the 10.11 one — Jellyfin
          treats targetAbi as a floor and will otherwise offer the older build
          (jellyfin#11331, closed Not A Bug). -->
-    <PluginVersion Condition="'$(PluginVersion)' == ''">10.11.0.3</PluginVersion>
+    <PluginVersion Condition="'$(PluginVersion)' == ''">10.11.0.4</PluginVersion>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

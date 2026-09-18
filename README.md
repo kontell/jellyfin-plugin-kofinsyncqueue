@@ -12,16 +12,16 @@ Both endpoints are authorized; the user is derived from the access token — no 
 
 ```
 GET /Kofin/SyncQueue/Info
-→ { "PluginVersion": "10.11.0.3", "ProtocolVersion": 1,
+→ { "PluginVersion": "10.11.0.4", "ProtocolVersion": 1,
     "ServerTime": <unix>, "RetentionCutoff": <unix|0>, "RetentionDays": 90,
-    "Features": ["library-scope"] }
+    "Features": ["library-scope", "playlists"] }
 
-GET /Kofin/SyncQueue?since=<unix>&types=movies,tvshows,boxsets,musicvideos,music
+GET /Kofin/SyncQueue?since=<unix>&types=movies,tvshows,boxsets,musicvideos,music,playlists
                     &libraries=<guid-N>,<guid-N>
 → { "ServerTime": <unix>, "RetentionCutoff": <unix|0>,
     "Items": [ { "Id": "<guid-N>", "Status": "Added|Updated|Removed",
-                 "MediaType": "movies|tvshows|boxsets|musicvideos|music",
-                 "ItemType": "Movie|BoxSet|Series|Season|Episode|MusicVideo|MusicAlbum|MusicArtist|Audio",
+                 "MediaType": "movies|tvshows|boxsets|musicvideos|music|playlists",
+                 "ItemType": "Movie|BoxSet|Series|Season|Episode|MusicVideo|MusicAlbum|MusicArtist|Audio|Playlist",
                  "LastModified": <unix>, "UpdateReason": "ImageUpdate, MetadataEdit"|null,
                  "Etag": "<md5>"|null, "SeriesId": "<guid-N>"|null, "SeasonId": "<guid-N>"|null,
                  "LibraryIds": ["<guid-N>", …]|null } ],
@@ -33,7 +33,7 @@ Semantics:
 * `since` is required (unix seconds; `0` = everything) and compared strictly (`LastModified > since`). Advance your watermark to the response's `ServerTime`.
 * `types` is an **include** list; absent means all. Unknown tokens are ignored (logged) — nothing ever defaults to a media type.
 * `libraries` is an **include** list of collection folder ids — the ids `/UserViews` and `/Items/{id}/Ancestors` report, and the ids a client whitelists. Absent means all; unreadable tokens are ignored (logged). Records whose `LibraryIds` is absent are **always** served, and removals are never library-filtered.
-* `LibraryIds` is what a whitelisting client needs to drop a record *before* fetching anything. Absent means unknown, never "belongs to nothing": boxsets carry none (they live in Collections, which no client syncs), folder-less artists resolve to none, and records stored before this field existed learn it the first time they are queried. It is a list because an item under two libraries belongs to both — `/Items/{id}/Ancestors` reports only the first, which is why resolving through it can pick the library you did not whitelist.
+* `LibraryIds` is what a whitelisting client needs to drop a record *before* fetching anything. Absent means unknown, never "belongs to nothing": boxsets carry none (they live in Collections, which no client syncs), playlists carry none (they live in the Playlists folder), folder-less artists resolve to none, and records stored before this field existed learn it the first time they are queried. It is a list because an item under two libraries belongs to both — `/Items/{id}/Ancestors` reports only the first, which is why resolving through it can pick the library you did not whitelist.
 * `Features` names optional capabilities on top of the protocol version. Clients require an exact `ProtocolVersion` match, so this list is how a capability is added without demoting every deployed client — read it by presence, and treat an absent list as a server that has none.
 * `Items` is coalesced: one record per item id. Added+Updated stays Added (reasons OR'd); anything+Removed becomes Removed.
 * `Etag` is computed at **query time** from the live item via `BaseItem.GetEtag(user)` — byte-identical to the Etag in every DTO the server hands out (verified live against a real item), so clients can drop records whose Etag matches what they already stored *before* downloading anything. Removed records carry no Etag.
@@ -72,8 +72,8 @@ Add the Kontell plugin repository, then install from the catalog — Jellyfin un
 Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
-sudo unzip kofin-sync-queue_10.11.0.3.zip \
-    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.3"
-sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.3"
+sudo unzip kofin-sync-queue_10.11.0.4.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.4"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.4"
 sudo systemctl restart jellyfin
 ```

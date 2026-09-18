@@ -74,7 +74,7 @@ public class SyncQueueController : ControllerBase
     /// query-time Etags, plus the caller's user-data DTOs.
     /// </summary>
     /// <param name="since">Unix-seconds watermark; 0 = everything. Required.</param>
-    /// <param name="types">Include list of media-type classes (movies,tvshows,boxsets,musicvideos,music); absent = all.</param>
+    /// <param name="types">Include list of media-type classes (movies,tvshows,boxsets,musicvideos,music,playlists); absent = all.</param>
     /// <param name="libraries">Include list of collection folder ids; absent = all. Records whose library is unknown are always served.</param>
     /// <returns>The <see cref="SyncQueueResponse"/>.</returns>
     [HttpGet("SyncQueue")]

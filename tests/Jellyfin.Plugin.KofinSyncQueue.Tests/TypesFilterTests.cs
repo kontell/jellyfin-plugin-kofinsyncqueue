@@ -25,15 +25,26 @@ public class TypesFilterTests
     }
 
     [Fact]
+    public void PlaylistsIsAKnownType()
+    {
+        var include = TypesFilter.Parse("movies,playlists", out var unknown);
+
+        Assert.NotNull(include);
+        Assert.Equal(2, include!.Count);
+        Assert.Contains("playlists", include);
+        Assert.Empty(unknown);
+    }
+
+    [Fact]
     public void UnknownTokensAreReportedNeverGuessed()
     {
-        var include = TypesFilter.Parse("movies,playlist,", out var unknown);
+        var include = TypesFilter.Parse("movies,not-a-type,", out var unknown);
 
         Assert.NotNull(include);
         Assert.Single(include!);
         Assert.Contains("movies", include);
         Assert.Single(unknown);
-        Assert.Contains("playlist", unknown);
+        Assert.Contains("not-a-type", unknown);
     }
 
     [Fact]
