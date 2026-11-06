@@ -25,7 +25,7 @@ public sealed class SyncStoreTests : IDisposable
         Directory.Delete(_directory, recursive: true);
     }
 
-    private static ItemEvent Event(Guid id, ItemStatus status, long ts, int reasons = 0)
+    private static ItemEvent Event(Guid id, ItemStatus status, int reasons = 0)
     {
         return new ItemEvent
         {
@@ -34,7 +34,6 @@ public sealed class SyncStoreTests : IDisposable
             MediaType = "movies",
             ItemType = "Movie",
             UpdateReasons = reasons,
-            Timestamp = ts,
         };
     }
 
@@ -42,11 +41,13 @@ public sealed class SyncStoreTests : IDisposable
     public void CoalescesToOneRecordPerItem()
     {
         var id = Guid.NewGuid();
-        _store.RecordItemEvents(new[]
-        {
-            Event(id, ItemStatus.Added, 100, reasons: 2),
-            Event(id, ItemStatus.Updated, 200, reasons: 4),
-        });
+        _store.RecordItemEvents(
+            new[]
+            {
+                Event(id, ItemStatus.Added, reasons: 2),
+                Event(id, ItemStatus.Updated, reasons: 4),
+            },
+            200);
 
         var records = _store.ItemsSince(0);
 
@@ -60,7 +61,7 @@ public sealed class SyncStoreTests : IDisposable
     public void SinceIsStrictlyGreater()
     {
         var id = Guid.NewGuid();
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) }, 100);
 
         Assert.Empty(_store.ItemsSince(100));
         Assert.Single(_store.ItemsSince(99));
@@ -91,11 +92,8 @@ public sealed class SyncStoreTests : IDisposable
     {
         var oldId = Guid.NewGuid();
         var newId = Guid.NewGuid();
-        _store.RecordItemEvents(new[]
-        {
-            Event(oldId, ItemStatus.Added, 100),
-            Event(newId, ItemStatus.Added, 900),
-        });
+        _store.RecordItemEvents(new[] { Event(oldId, ItemStatus.Added) }, 100);
+        _store.RecordItemEvents(new[] { Event(newId, ItemStatus.Added) }, 900);
         _store.RecordUserData(Guid.NewGuid(), oldId, "movies", "{}", 100);
 
         var deleted = _store.DeleteOlderThan(500);
@@ -109,9 +107,9 @@ public sealed class SyncStoreTests : IDisposable
     public void ReAddAfterRemoveSurvivesRoundTrip()
     {
         var id = Guid.NewGuid();
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Removed, 200) });
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 300) });
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) }, 100);
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Removed) }, 200);
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) }, 300);
 
         var record = Assert.Single(_store.ItemsSince(0));
         Assert.Equal(ItemStatus.Added, record.Status);
@@ -123,13 +121,13 @@ public sealed class SyncStoreTests : IDisposable
     {
         var id = Guid.NewGuid();
         var seriesId = Guid.NewGuid();
-        var itemEvent = Event(id, ItemStatus.Added, 100);
+        var itemEvent = Event(id, ItemStatus.Added);
         itemEvent.ItemType = "Episode";
         itemEvent.MediaType = "tvshows";
         itemEvent.SeriesId = seriesId;
 
-        _store.RecordItemEvents(new[] { itemEvent });
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Updated, 200) });
+        _store.RecordItemEvents(new[] { itemEvent }, 100);
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Updated) }, 200);
 
         var record = Assert.Single(_store.ItemsSince(0));
         Assert.Equal(seriesId, record.SeriesId);
@@ -142,10 +140,10 @@ public sealed class SyncStoreTests : IDisposable
         // instantiate fails here rather than in production.
         var id = Guid.NewGuid();
         var libraries = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
-        var itemEvent = Event(id, ItemStatus.Added, 100);
+        var itemEvent = Event(id, ItemStatus.Added);
         itemEvent.LibraryIds = libraries;
 
-        _store.RecordItemEvents(new[] { itemEvent });
+        _store.RecordItemEvents(new[] { itemEvent }, 100);
 
         var record = Assert.Single(_store.ItemsSince(0));
         Assert.Equal(libraries, record.LibraryIds);
@@ -155,7 +153,7 @@ public sealed class SyncStoreTests : IDisposable
     public void ARecordStoredBeforeTheDimensionReadsBackUnknown()
     {
         var id = Guid.NewGuid();
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) }, 100);
 
         var record = Assert.Single(_store.ItemsSince(0));
         Assert.Null(record.LibraryIds);
@@ -165,7 +163,7 @@ public sealed class SyncStoreTests : IDisposable
     public void BackfilledLibrariesPersist()
     {
         var id = Guid.NewGuid();
-        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added, 100) });
+        _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) }, 100);
 
         var record = Assert.Single(_store.ItemsSince(0));
         record.LibraryIds = new List<Guid> { Guid.NewGuid() };
@@ -180,19 +178,19 @@ public sealed class SyncStoreTests : IDisposable
         var live = Guid.NewGuid();
         var deleted = Guid.NewGuid();
 
-        var kept = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        var kept = Event(Guid.NewGuid(), ItemStatus.Added);
         kept.LibraryIds = new List<Guid> { live };
 
-        var ghost = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        var ghost = Event(Guid.NewGuid(), ItemStatus.Added);
         ghost.LibraryIds = new List<Guid> { deleted };
 
         // One foot in each: still reachable, so still wanted.
-        var straddling = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        var straddling = Event(Guid.NewGuid(), ItemStatus.Added);
         straddling.LibraryIds = new List<Guid> { deleted, live };
 
-        var unknown = Event(Guid.NewGuid(), ItemStatus.Added, 100);
+        var unknown = Event(Guid.NewGuid(), ItemStatus.Added);
 
-        _store.RecordItemEvents(new[] { kept, ghost, straddling, unknown });
+        _store.RecordItemEvents(new[] { kept, ghost, straddling, unknown }, 100);
 
         var reaped = _store.DeleteWithDeadLibraries(new HashSet<Guid> { live });
 
@@ -210,11 +208,13 @@ public sealed class SyncStoreTests : IDisposable
     {
         var doomed = Guid.NewGuid();
         var spared = Guid.NewGuid();
-        _store.RecordItemEvents(new[]
-        {
-            Event(doomed, ItemStatus.Added, 100),
-            Event(spared, ItemStatus.Added, 100),
-        });
+        _store.RecordItemEvents(
+            new[]
+            {
+                Event(doomed, ItemStatus.Added),
+                Event(spared, ItemStatus.Added),
+            },
+            100);
 
         Assert.Equal(1, _store.DeleteItems(new[] { doomed }));
         Assert.Equal(spared, Assert.Single(_store.ItemsSince(0)).ItemId);
@@ -225,11 +225,8 @@ public sealed class SyncStoreTests : IDisposable
     {
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
-        _store.RecordItemEvents(new[]
-        {
-            Event(second, ItemStatus.Added, 900),
-            Event(first, ItemStatus.Added, 100),
-        });
+        _store.RecordItemEvents(new[] { Event(second, ItemStatus.Added) }, 900);
+        _store.RecordItemEvents(new[] { Event(first, ItemStatus.Added) }, 100);
 
         var records = _store.ItemsSince(0);
 

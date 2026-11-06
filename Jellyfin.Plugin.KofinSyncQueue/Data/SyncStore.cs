@@ -45,7 +45,13 @@ public class SyncStore : IDisposable
     /// Record a batch of item events, coalescing per item id on write.
     /// </summary>
     /// <param name="events">The captured events, in occurrence order.</param>
-    public void RecordItemEvents(IEnumerable<ItemEvent> events)
+    /// <param name="timestamp">
+    /// The write time, unix seconds. Clients advance their cursor to the
+    /// ServerTime of the request that read the feed, so a record stamped
+    /// earlier than it was written is never served to a client that read
+    /// in between.
+    /// </param>
+    public void RecordItemEvents(IEnumerable<ItemEvent> events, long timestamp)
     {
         lock (_writeLock)
         {
@@ -53,7 +59,7 @@ public class SyncStore : IDisposable
             {
                 var id = itemEvent.ItemId;
                 var existing = Items.FindOne(x => x.ItemId == id);
-                var merged = RecordMerge.Apply(existing, itemEvent);
+                var merged = RecordMerge.Apply(existing, itemEvent, timestamp);
 
                 if (existing is null)
                 {

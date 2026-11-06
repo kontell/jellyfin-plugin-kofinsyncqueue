@@ -144,7 +144,6 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
             // *removed* item is still materialised, and the ItemEvent that
             // leaves this method is deliberately BaseItem-free.
             LibraryIds = ResolveLibraries(e, itemType, status),
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
 
         bool flushNow;
@@ -244,7 +243,11 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
 
         try
         {
-            _store.RecordItemEvents(batch);
+            // Stamped now, not when each event was captured: the batch waits
+            // out a debounce that every further event restarts, and a record
+            // stamped before a client's read but written after it would sit
+            // behind that client's cursor for good.
+            _store.RecordItemEvents(batch, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             _logger.LogInformation("Recorded {Count} library change events", batch.Count);
         }
         catch (Exception exception)

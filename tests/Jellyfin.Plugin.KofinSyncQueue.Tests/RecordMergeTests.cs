@@ -9,7 +9,7 @@ public class RecordMergeTests
 {
     private static readonly Guid ItemId = Guid.NewGuid();
 
-    private static ItemEvent Event(ItemStatus status, int reasons = 0, long ts = 100)
+    private static ItemEvent Event(ItemStatus status, int reasons = 0)
     {
         return new ItemEvent
         {
@@ -18,14 +18,13 @@ public class RecordMergeTests
             MediaType = "movies",
             ItemType = "Movie",
             UpdateReasons = reasons,
-            Timestamp = ts,
         };
     }
 
     [Fact]
     public void FreshEventCreatesRecord()
     {
-        var record = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2));
+        var record = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2), 100);
 
         Assert.Equal(ItemStatus.Added, record.Status);
         Assert.Equal(2, record.UpdateReasons);
@@ -35,10 +34,10 @@ public class RecordMergeTests
     [Fact]
     public void AddedSwallowsUpdatedAndAccumulatesReasons()
     {
-        var added = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2, ts: 100));
+        var added = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2), 100);
         added.Id = 7;
 
-        var merged = RecordMerge.Apply(added, Event(ItemStatus.Updated, reasons: 4, ts: 200));
+        var merged = RecordMerge.Apply(added, Event(ItemStatus.Updated, reasons: 4), 200);
 
         Assert.Equal(ItemStatus.Added, merged.Status);
         Assert.Equal(6, merged.UpdateReasons);
@@ -49,8 +48,8 @@ public class RecordMergeTests
     [Fact]
     public void UpdatedPlusUpdatedOrsReasons()
     {
-        var first = RecordMerge.Apply(null, Event(ItemStatus.Updated, reasons: 4));
-        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, reasons: 16, ts: 150));
+        var first = RecordMerge.Apply(null, Event(ItemStatus.Updated, reasons: 4), 100);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, reasons: 16), 150);
 
         Assert.Equal(ItemStatus.Updated, merged.Status);
         Assert.Equal(20, merged.UpdateReasons);
@@ -59,8 +58,8 @@ public class RecordMergeTests
     [Fact]
     public void RemovedWinsAndClearsReasons()
     {
-        var added = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2));
-        var merged = RecordMerge.Apply(added, Event(ItemStatus.Removed, ts: 300));
+        var added = RecordMerge.Apply(null, Event(ItemStatus.Added, reasons: 2), 100);
+        var merged = RecordMerge.Apply(added, Event(ItemStatus.Removed), 300);
 
         Assert.Equal(ItemStatus.Removed, merged.Status);
         Assert.Equal(0, merged.UpdateReasons);
@@ -70,8 +69,8 @@ public class RecordMergeTests
     [Fact]
     public void ReAddAfterRemovedStartsOver()
     {
-        var removed = RecordMerge.Apply(null, Event(ItemStatus.Removed));
-        var merged = RecordMerge.Apply(removed, Event(ItemStatus.Added, reasons: 2, ts: 400));
+        var removed = RecordMerge.Apply(null, Event(ItemStatus.Removed), 100);
+        var merged = RecordMerge.Apply(removed, Event(ItemStatus.Added, reasons: 2), 400);
 
         Assert.Equal(ItemStatus.Added, merged.Status);
         Assert.Equal(2, merged.UpdateReasons);
@@ -84,8 +83,8 @@ public class RecordMergeTests
         var withParent = Event(ItemStatus.Added);
         withParent.SeriesId = seriesId;
 
-        var first = RecordMerge.Apply(null, withParent);
-        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, ts: 500));
+        var first = RecordMerge.Apply(null, withParent, 100);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated), 500);
 
         Assert.Equal(seriesId, merged.SeriesId);
     }
@@ -97,8 +96,8 @@ public class RecordMergeTests
         var withLibrary = Event(ItemStatus.Added);
         withLibrary.LibraryIds = new List<Guid> { library };
 
-        var first = RecordMerge.Apply(null, withLibrary);
-        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated, ts: 500));
+        var first = RecordMerge.Apply(null, withLibrary, 100);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Updated), 500);
 
         Assert.Equal(new[] { library }, merged.LibraryIds);
     }
@@ -113,8 +112,8 @@ public class RecordMergeTests
         var added = Event(ItemStatus.Added);
         added.LibraryIds = new List<Guid> { library };
 
-        var first = RecordMerge.Apply(null, added);
-        var merged = RecordMerge.Apply(first, Event(ItemStatus.Removed, ts: 900));
+        var first = RecordMerge.Apply(null, added, 100);
+        var merged = RecordMerge.Apply(first, Event(ItemStatus.Removed), 900);
 
         Assert.Equal(ItemStatus.Removed, merged.Status);
         Assert.Equal(new[] { library }, merged.LibraryIds);
@@ -129,10 +128,10 @@ public class RecordMergeTests
         var first = Event(ItemStatus.Added);
         first.LibraryIds = new List<Guid> { before };
 
-        var second = Event(ItemStatus.Updated, ts: 600);
+        var second = Event(ItemStatus.Updated);
         second.LibraryIds = new List<Guid> { after };
 
-        var merged = RecordMerge.Apply(RecordMerge.Apply(null, first), second);
+        var merged = RecordMerge.Apply(RecordMerge.Apply(null, first, 100), second, 600);
 
         Assert.Equal(new[] { after }, merged.LibraryIds);
     }

@@ -85,7 +85,9 @@ public class UserDataRec
 
 /// <summary>
 /// One captured library event, the recorder → store hand-off shape.
-/// BaseItem-free so the store and merge logic stay unit-testable.
+/// BaseItem-free so the store and merge logic stay unit-testable. It carries
+/// no time: the record is stamped when it is written (see
+/// <see cref="SyncStore.RecordItemEvents"/>).
 /// </summary>
 public class ItemEvent
 {
@@ -112,7 +114,4 @@ public class ItemEvent
 
     /// <summary>Gets or sets the collection folders the item belongs to; null when unresolvable.</summary>
     public List<Guid>? LibraryIds { get; set; }
-
-    /// <summary>Gets or sets the event capture time, unix seconds.</summary>
-    public long Timestamp { get; set; }
 }
