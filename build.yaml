@@ -51,13 +51,5 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - A client's watermark can no longer pass a record that was still being
-    written. Item records carried the time their event was captured, a
-    debounce or more before they were written, and both item and user-data
-    rows could be stamped before a concurrent read and committed after it.
-    Records are now stamped inside the lock the feed reads under, and
-    ServerTime trails the clock by a second, so advancing to it exactly
-    loses nothing.
-  - The logo is a 1920x1080 banner in the format of Jellyfin's own plugin
-    images, so the dashboard card and the plugin page show all of it instead
-    of cropping a square.
+  - Fix changes made just before or during a sync never reaching the client.
+  - Make the logo a 1920x1080 banner so Jellyfin no longer crops it.
