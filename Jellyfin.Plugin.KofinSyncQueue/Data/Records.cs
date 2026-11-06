@@ -85,7 +85,9 @@ public class UserDataRec
 
 /// <summary>
 /// One captured library event, the recorder → store hand-off shape.
-/// BaseItem-free so the store and merge logic stay unit-testable.
+/// BaseItem-free so the store and merge logic stay unit-testable. It carries
+/// no time: the record is stamped when it is written (see
+/// <see cref="SyncStore.RecordItemEvents"/>).
 /// </summary>
 public class ItemEvent
 {
@@ -112,7 +114,16 @@ public class ItemEvent
 
     /// <summary>Gets or sets the collection folders the item belongs to; null when unresolvable.</summary>
     public List<Guid>? LibraryIds { get; set; }
-
-    /// <summary>Gets or sets the event capture time, unix seconds.</summary>
-    public long Timestamp { get; set; }
 }
+
+/// <summary>
+/// One feed read: the cursor and the rows it covers, taken together under the
+/// store's write lock (see <see cref="SyncStore.Snapshot"/>).
+/// </summary>
+/// <param name="ServerTime">The cursor: every row stamped after the watermark and at or before this is here.</param>
+/// <param name="Items">Item records after the watermark, oldest first.</param>
+/// <param name="UserData">The caller's user-data rows after the watermark, oldest first.</param>
+public sealed record FeedSnapshot(
+    long ServerTime,
+    IReadOnlyList<ItemRec> Items,
+    IReadOnlyList<UserDataRec> UserData);

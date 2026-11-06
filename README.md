@@ -12,7 +12,7 @@ Both endpoints are authorized; the user is derived from the access token — no 
 
 ```
 GET /Kofin/SyncQueue/Info
-→ { "PluginVersion": "10.11.0.4", "ProtocolVersion": 1,
+→ { "PluginVersion": "10.11.0.5", "ProtocolVersion": 1,
     "ServerTime": <unix>, "RetentionCutoff": <unix|0>, "RetentionDays": 90,
     "Features": ["library-scope", "playlists"] }
 
@@ -30,7 +30,7 @@ GET /Kofin/SyncQueue?since=<unix>&types=movies,tvshows,boxsets,musicvideos,music
 
 Semantics:
 
-* `since` is required (unix seconds; `0` = everything) and compared strictly (`LastModified > since`). Advance your watermark to the response's `ServerTime`.
+* `since` is required (unix seconds; `0` = everything) and compared strictly (`LastModified > since`). Advance your watermark to the response's `ServerTime` exactly. It trails the server clock by a second, and the response carries every record stamped after `since` up to and including it: records are stamped inside the lock the read takes, so none still being written can carry a time at or before it. `/Info`'s `ServerTime` follows the same rule, so it is a safe watermark to take before listing the library directly.
 * `types` is an **include** list; absent means all. Unknown tokens are ignored (logged) — nothing ever defaults to a media type.
 * `libraries` is an **include** list of collection folder ids — the ids `/UserViews` and `/Items/{id}/Ancestors` report, and the ids a client whitelists. Absent means all; unreadable tokens are ignored (logged). Records whose `LibraryIds` is absent are **always** served, and removals are never library-filtered.
 * `LibraryIds` is what a whitelisting client needs to drop a record *before* fetching anything. Absent means unknown, never "belongs to nothing": boxsets carry none (they live in Collections, which no client syncs), playlists carry none (they live in the Playlists folder), folder-less artists resolve to none, and records stored before this field existed learn it the first time they are queried. It is a list because an item under two libraries belongs to both — `/Items/{id}/Ancestors` reports only the first, which is why resolving through it can pick the library you did not whitelist.
@@ -72,8 +72,8 @@ Add the Kontell plugin repository, then install from the catalog — Jellyfin un
 Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
-sudo unzip kofin-sync-queue_10.11.0.4.zip \
-    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.4"
-sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.4"
+sudo unzip kofin-sync-queue_10.11.0.5.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.5"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.5"
 sudo systemctl restart jellyfin
 ```

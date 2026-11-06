@@ -14,8 +14,9 @@ public static class RecordMerge
     /// </summary>
     /// <param name="existing">The stored record for the item, if any.</param>
     /// <param name="incoming">The captured event.</param>
+    /// <param name="timestamp">The write time, unix seconds.</param>
     /// <returns>The merged record.</returns>
-    public static ItemRec Apply(ItemRec? existing, ItemEvent incoming)
+    public static ItemRec Apply(ItemRec? existing, ItemEvent incoming, long timestamp)
     {
         var record = new ItemRec
         {
@@ -23,7 +24,7 @@ public static class RecordMerge
             ItemId = incoming.ItemId,
             MediaType = incoming.MediaType,
             ItemType = incoming.ItemType,
-            LastModified = incoming.Timestamp,
+            LastModified = timestamp,
             SeriesId = incoming.SeriesId ?? existing?.SeriesId,
             SeasonId = incoming.SeasonId ?? existing?.SeasonId,
             // Sticky for the same reason the parent ids are, and load-bearing

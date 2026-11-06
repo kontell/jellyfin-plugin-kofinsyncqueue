@@ -14,7 +14,7 @@ guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
 # The authority is the csproj's PluginVersion, which is what tools/package.sh
 # reads to name the zip and stamp meta.json; the value here is documentation and
 # is asserted against it at release time.
-version: "10.11.0.4"
+version: "10.11.0.5"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
@@ -30,10 +30,14 @@ category: "General"
 #             server refuses a path that escapes the plugin folder, so this is
 #             a bare filename.
 #
-#             Keep the artwork inset in the canvas -- 600x600 with the mark
-#             about 420 wide. jellyfin-web scales the image to the tile and
-#             adds no margin of its own, so art that reaches its own edges
-#             reaches the edges of the tile and reads as overflowing it.
+#             The format is Jellyfin's own plugin images (jellyfin-ux
+#             plugins/SVG): 1920x1080, because jellyfin-web shows the image
+#             in a 16:9 box on the plugin page and cover-fits it to the
+#             dashboard card, which crops anything taller. Keep the mark and
+#             name inside the middle 1280x540: the narrowest card shows about
+#             the middle 1300 pixels across, a phone-width one about the
+#             middle 540 down. logo.svg is the source; render it with
+#             rsvg-convert -w 1920 -h 1080 logo.svg -o logo.png.
 #   imageUrl  the copy the *catalogue* shows, before anything is installed:
 #             repository.kontell's generate_jellyfin_repo.py copies it out of
 #             meta.json into manifest.json. It has to be reachable by a server
@@ -47,6 +51,13 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Playlists are a recorded type (`playlists` / `Playlist`), library-agnostic
-    like boxsets, advertised in Features so a client can ask for them without a
-    protocol bump.
+  - A client's watermark can no longer pass a record that was still being
+    written. Item records carried the time their event was captured, a
+    debounce or more before they were written, and both item and user-data
+    rows could be stamped before a concurrent read and committed after it.
+    Records are now stamped inside the lock the feed reads under, and
+    ServerTime trails the clock by a second, so advancing to it exactly
+    loses nothing.
+  - The logo is a 1920x1080 banner in the format of Jellyfin's own plugin
+    images, so the dashboard card and the plugin page show all of it instead
+    of cropping a square.

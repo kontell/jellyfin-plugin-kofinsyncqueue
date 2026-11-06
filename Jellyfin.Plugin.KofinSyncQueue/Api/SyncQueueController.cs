@@ -56,15 +56,17 @@ public class SyncQueueController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<SyncInfoResponse> GetInfo()
     {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // The feed's cursor, not the raw clock: a client takes this before
+        // listing the library itself and then reads the feed from it.
+        var serverTime = _store.Cursor();
         var retentionDays = KofinSyncQueuePlugin.RetentionDays;
 
         return new SyncInfoResponse
         {
             PluginVersion = KofinSyncQueuePlugin.Instance?.Version.ToString() ?? "0",
             ProtocolVersion = 1,
-            ServerTime = now,
-            RetentionCutoff = RetentionMath.CutoffFor(retentionDays, now),
+            ServerTime = serverTime,
+            RetentionCutoff = RetentionMath.CutoffFor(retentionDays, serverTime),
             RetentionDays = retentionDays,
         };
     }
@@ -120,18 +122,20 @@ public class SyncQueueController : ControllerBase
             _logger.LogWarning("Ignoring unreadable libraries tokens: {Tokens}", unparsed);
         }
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // Rows and cursor in one locked read; the item loads and Etags below
+        // run after the lock is released.
+        var snapshot = _store.Snapshot(since.Value, userId);
         var response = new SyncQueueResponse
         {
-            ServerTime = now,
-            RetentionCutoff = RetentionMath.CutoffFor(KofinSyncQueuePlugin.RetentionDays, now),
+            ServerTime = snapshot.ServerTime,
+            RetentionCutoff = RetentionMath.CutoffFor(KofinSyncQueuePlugin.RetentionDays, snapshot.ServerTime),
         };
 
         var learned = new List<ItemRec>();
         var orphaned = new List<Guid>();
         var foreign = 0;
 
-        foreach (var record in _store.ItemsSince(since.Value))
+        foreach (var record in snapshot.Items)
         {
             if (include is not null && !include.Contains(record.MediaType))
             {
@@ -202,7 +206,7 @@ public class SyncQueueController : ControllerBase
                 _store.DeleteItems(orphaned));
         }
 
-        foreach (var record in _store.UserDataSince(since.Value, userId))
+        foreach (var record in snapshot.UserData)
         {
             if (include is not null && !include.Contains(record.MediaType))
             {
