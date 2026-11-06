@@ -243,11 +243,10 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
 
         try
         {
-            // Stamped now, not when each event was captured: the batch waits
-            // out a debounce that every further event restarts, and a record
-            // stamped before a client's read but written after it would sit
-            // behind that client's cursor for good.
-            _store.RecordItemEvents(batch, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            // No time travels with the events: the store stamps the batch
+            // inside the lock its feed reads take, not when each event was
+            // captured a debounce or more ago.
+            _store.RecordItemEvents(batch);
             _logger.LogInformation("Recorded {Count} library change events", batch.Count);
         }
         catch (Exception exception)

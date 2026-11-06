@@ -139,7 +139,6 @@ public class UserDataRecorder : IHostedService, IDisposable
 
         try
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var written = 0;
 
             foreach (var (userId, items) in batch)
@@ -166,12 +165,14 @@ public class UserDataRecorder : IHostedService, IDisposable
                     }
 
                     dto.ItemId = item.Id;
+
+                    // Stamped by the store at the commit, after the DTO work,
+                    // not once for the whole flush before it.
                     _store.RecordUserData(
                         userId,
                         item.Id,
                         mediaType,
-                        JsonSerializer.Serialize(dto, _jsonOptions),
-                        now);
+                        JsonSerializer.Serialize(dto, _jsonOptions));
                     written++;
                 }
             }

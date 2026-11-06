@@ -115,3 +115,15 @@ public class ItemEvent
     /// <summary>Gets or sets the collection folders the item belongs to; null when unresolvable.</summary>
     public List<Guid>? LibraryIds { get; set; }
 }
+
+/// <summary>
+/// One feed read: the cursor and the rows it covers, taken together under the
+/// store's write lock (see <see cref="SyncStore.Snapshot"/>).
+/// </summary>
+/// <param name="ServerTime">The cursor: every row stamped after the watermark and at or before this is here.</param>
+/// <param name="Items">Item records after the watermark, oldest first.</param>
+/// <param name="UserData">The caller's user-data rows after the watermark, oldest first.</param>
+public sealed record FeedSnapshot(
+    long ServerTime,
+    IReadOnlyList<ItemRec> Items,
+    IReadOnlyList<UserDataRec> UserData);

@@ -19,11 +19,17 @@ public class SyncStore : IDisposable
 
     private readonly LiteDatabase _db;
     private readonly ILogger<SyncStore> _logger;
+    private readonly TimeProvider _clock;
+
+    // Every write and every feed read takes this lock, and every stamp is
+    // taken inside it. That pairing is the whole cursor guarantee: see
+    // Snapshot.
     private readonly object _writeLock = new object();
 
-    public SyncStore(string dataPath, ILogger<SyncStore> logger)
+    public SyncStore(string dataPath, ILogger<SyncStore> logger, TimeProvider? clock = null)
     {
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
         var directory = Path.Combine(dataPath, "kofinsyncqueue");
         Directory.CreateDirectory(directory);
         _db = new LiteDatabase($"filename={Path.Combine(directory, "kofinsyncqueue.db")}");
@@ -42,24 +48,22 @@ public class SyncStore : IDisposable
     private ILiteCollection<UserDataRec> UserData => _db.GetCollection<UserDataRec>(UserDataCollection);
 
     /// <summary>
-    /// Record a batch of item events, coalescing per item id on write.
+    /// Record a batch of item events, coalescing per item id on write. The
+    /// batch is stamped once, inside the lock, so no snapshot sees part of it
+    /// and none hands out a cursor at or past its stamp.
     /// </summary>
     /// <param name="events">The captured events, in occurrence order.</param>
-    /// <param name="timestamp">
-    /// The write time, unix seconds. Clients advance their cursor to the
-    /// ServerTime of the request that read the feed, so a record stamped
-    /// earlier than it was written is never served to a client that read
-    /// in between.
-    /// </param>
-    public void RecordItemEvents(IEnumerable<ItemEvent> events, long timestamp)
+    public void RecordItemEvents(IEnumerable<ItemEvent> events)
     {
         lock (_writeLock)
         {
+            var stamp = Now();
+
             foreach (var itemEvent in events)
             {
                 var id = itemEvent.ItemId;
                 var existing = Items.FindOne(x => x.ItemId == id);
-                var merged = RecordMerge.Apply(existing, itemEvent, timestamp);
+                var merged = RecordMerge.Apply(existing, itemEvent, stamp);
 
                 if (existing is null)
                 {
@@ -75,8 +79,9 @@ public class SyncStore : IDisposable
 
     /// <summary>
     /// Record one user-data change: single row per (user, item), newest wins.
+    /// Stamped inside the lock, at the commit, as item batches are.
     /// </summary>
-    public void RecordUserData(Guid userId, Guid itemId, string mediaType, string json, long timestamp)
+    public void RecordUserData(Guid userId, Guid itemId, string mediaType, string json)
     {
         lock (_writeLock)
         {
@@ -88,7 +93,7 @@ public class SyncStore : IDisposable
                 ItemId = itemId,
                 MediaType = mediaType,
                 Json = json,
-                LastModified = timestamp,
+                LastModified = Now(),
             };
 
             if (existing is null)
@@ -103,23 +108,51 @@ public class SyncStore : IDisposable
     }
 
     /// <summary>
-    /// Change records strictly after the watermark, oldest first.
+    /// The feed read: item and user-data rows after the watermark, and the
+    /// cursor that covers them, copied out in one critical section.
     /// </summary>
-    public IReadOnlyList<ItemRec> ItemsSince(long since)
+    /// <remarks>
+    /// The cursor is one second behind the clock, and only rows stamped at or
+    /// before it are served. A write either finished before this lock was
+    /// taken, so its rows are visible, or starts after it is released, so its
+    /// stamp is no earlier than this second and lands after the cursor. Nothing
+    /// stamped at or before the cursor can still be on its way, which is what
+    /// lets a client advance its watermark to the cursor exactly. Rows stamped
+    /// in the current second wait for the next read.
+    /// </remarks>
+    /// <param name="since">The caller's watermark; rows strictly after it.</param>
+    /// <param name="userId">Whose user-data rows to include.</param>
+    /// <returns>The rows, oldest first, and the cursor.</returns>
+    public FeedSnapshot Snapshot(long since, Guid userId)
     {
-        return Items.Find(x => x.LastModified > since)
-            .OrderBy(x => x.LastModified)
-            .ToList();
+        lock (_writeLock)
+        {
+            var cursor = Now() - 1;
+
+            var items = Items.Find(x => x.LastModified > since && x.LastModified <= cursor)
+                .OrderBy(x => x.LastModified)
+                .ToList();
+
+            var userData = UserData.Find(x => x.LastModified > since && x.LastModified <= cursor && x.UserId == userId)
+                .OrderBy(x => x.LastModified)
+                .ToList();
+
+            return new FeedSnapshot(cursor, items, userData);
+        }
     }
 
     /// <summary>
-    /// The caller's user-data changes strictly after the watermark.
+    /// The cursor alone, by the same rule as <see cref="Snapshot"/>: a
+    /// watermark taken now, before a client lists the library itself, that
+    /// no later write can be stamped at or before.
     /// </summary>
-    public IReadOnlyList<UserDataRec> UserDataSince(long since, Guid userId)
+    /// <returns>Unix seconds, one behind the clock.</returns>
+    public long Cursor()
     {
-        return UserData.Find(x => x.LastModified > since && x.UserId == userId)
-            .OrderBy(x => x.LastModified)
-            .ToList();
+        lock (_writeLock)
+        {
+            return Now() - 1;
+        }
     }
 
     /// <summary>
@@ -247,6 +280,8 @@ public class SyncStore : IDisposable
             return items + userData;
         }
     }
+
+    private long Now() => _clock.GetUtcNow().ToUnixTimeSeconds();
 
     /// <inheritdoc />
     public void Dispose()

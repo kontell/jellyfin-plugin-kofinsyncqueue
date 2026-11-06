@@ -51,11 +51,13 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Library change records are stamped when they are written, not when the
-    event was captured. A record waits out a debounce of five seconds or more
-    before it is written, and one captured before a client's catch-up and
-    written after it carried a time behind that client's cursor, so it was
-    never served.
+  - A client's watermark can no longer pass a record that was still being
+    written. Item records carried the time their event was captured, a
+    debounce or more before they were written, and both item and user-data
+    rows could be stamped before a concurrent read and committed after it.
+    Records are now stamped inside the lock the feed reads under, and
+    ServerTime trails the clock by a second, so advancing to it exactly
+    loses nothing.
   - The logo is a 1920x1080 banner in the format of Jellyfin's own plugin
     images, so the dashboard card and the plugin page show all of it instead
     of cropping a square.
