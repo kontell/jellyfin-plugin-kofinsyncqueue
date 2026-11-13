@@ -53,7 +53,8 @@ public class SyncStore : IDisposable
     /// and none hands out a cursor at or past its stamp.
     /// </summary>
     /// <param name="events">The captured events, in occurrence order.</param>
-    public void RecordItemEvents(IEnumerable<ItemEvent> events)
+    /// <returns>The batch's stamp: a feed read serves it from the second after on.</returns>
+    public long RecordItemEvents(IEnumerable<ItemEvent> events)
     {
         lock (_writeLock)
         {
@@ -74,6 +75,8 @@ public class SyncStore : IDisposable
                     Items.Update(merged);
                 }
             }
+
+            return stamp;
         }
     }
 

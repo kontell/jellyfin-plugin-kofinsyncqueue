@@ -88,6 +88,20 @@ public sealed class SyncStoreTests : IDisposable
     }
 
     [Fact]
+    public void ABatchIsServedFromTheSecondAfterTheStampItReturns()
+    {
+        var id = Guid.NewGuid();
+        _clock.Seconds = 300;
+
+        var stamp = _store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) });
+
+        Assert.Equal(300, stamp);
+        Assert.Empty(_store.Snapshot(0, Guid.Empty).Items);
+        _clock.Seconds = stamp + 1;
+        Assert.Single(_store.Snapshot(0, Guid.Empty).Items);
+    }
+
+    [Fact]
     public void UserDataIsPerUserAndNewestWins()
     {
         var userA = Guid.NewGuid();

@@ -25,6 +25,7 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
 
     private readonly ILibraryManager _libraryManager;
     private readonly SyncStore _store;
+    private readonly ChangePusher _pusher;
     private readonly ILogger<LibraryChangeRecorder> _logger;
     private readonly object _lock = new object();
     private readonly List<ItemEvent> _pending = new List<ItemEvent>();
@@ -40,10 +41,12 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
     public LibraryChangeRecorder(
         ILibraryManager libraryManager,
         SyncStore store,
+        ChangePusher pusher,
         ILogger<LibraryChangeRecorder> logger)
     {
         _libraryManager = libraryManager;
         _store = store;
+        _pusher = pusher;
         _logger = logger;
     }
 
@@ -246,8 +249,12 @@ public class LibraryChangeRecorder : IHostedService, IDisposable
             // No time travels with the events: the store stamps the batch
             // inside the lock its feed reads take, not when each event was
             // captured a debounce or more ago.
-            _store.RecordItemEvents(batch);
+            var stamp = _store.RecordItemEvents(batch);
             _logger.LogInformation("Recorded {Count} library change events", batch.Count);
+
+            // Not awaited: the push waits for the feed to serve the batch,
+            // and the timer thread is not held for it.
+            _ = _pusher.PushAsync(batch, stamp);
         }
         catch (Exception exception)
         {
