@@ -135,4 +135,18 @@ public class RecordMergeTests
 
         Assert.Equal(new[] { after }, merged.LibraryIds);
     }
+
+    [Fact]
+    public void ApplyStoresTheStatusFoldGives()
+    {
+        var incoming = new[] { ItemStatus.Added, ItemStatus.Updated, ItemStatus.Removed };
+        foreach (var before in new ItemStatus?[] { null, ItemStatus.Added, ItemStatus.Updated, ItemStatus.Removed })
+        {
+            var existing = before is null ? null : RecordMerge.Apply(null, Event(before.Value), 100);
+            foreach (var status in incoming)
+            {
+                Assert.Equal(RecordMerge.Fold(before, status), RecordMerge.Apply(existing, Event(status), 200).Status);
+            }
+        }
+    }
 }

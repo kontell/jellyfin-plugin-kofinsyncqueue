@@ -14,7 +14,7 @@ guid: "eed3be84-d5cc-4f3b-b346-ba80c81cbec9"
 # The authority is the csproj's PluginVersion, which is what tools/package.sh
 # reads to name the zip and stamp meta.json; the value here is documentation and
 # is asserted against it at release time.
-version: "10.11.0.5"
+version: "10.11.0.6"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "kontell"
@@ -51,5 +51,4 @@ artifacts:
   - "Jellyfin.Plugin.KofinSyncQueue.dll"
   - "LiteDB.dll"
 changelog: |-
-  - Fix changes made just before or during a sync never reaching the client.
-  - Make the logo a 1920x1080 banner so Jellyfin no longer crops it.
+  - Tell Kofin about library changes a few seconds after a scan finds them, not 30 seconds after the library goes quiet.

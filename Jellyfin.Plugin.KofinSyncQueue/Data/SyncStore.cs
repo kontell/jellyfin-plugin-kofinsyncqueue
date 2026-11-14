@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using LiteDB;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +18,9 @@ public class SyncStore : IDisposable
 {
     private const string ItemsCollection = "items";
     private const string UserDataCollection = "userdata";
+
+    // How far the cursor trails the clock, in seconds (Snapshot).
+    private const long CursorLag = 1;
 
     private readonly LiteDatabase _db;
     private readonly ILogger<SyncStore> _logger;
@@ -53,7 +58,8 @@ public class SyncStore : IDisposable
     /// and none hands out a cursor at or past its stamp.
     /// </summary>
     /// <param name="events">The captured events, in occurrence order.</param>
-    public void RecordItemEvents(IEnumerable<ItemEvent> events)
+    /// <returns>The batch's stamp, for <see cref="WaitUntilServedAsync"/>.</returns>
+    public long RecordItemEvents(IEnumerable<ItemEvent> events)
     {
         lock (_writeLock)
         {
@@ -74,6 +80,8 @@ public class SyncStore : IDisposable
                     Items.Update(merged);
                 }
             }
+
+            return stamp;
         }
     }
 
@@ -127,7 +135,7 @@ public class SyncStore : IDisposable
     {
         lock (_writeLock)
         {
-            var cursor = Now() - 1;
+            var cursor = Now() - CursorLag;
 
             var items = Items.Find(x => x.LastModified > since && x.LastModified <= cursor)
                 .OrderBy(x => x.LastModified)
@@ -151,7 +159,24 @@ public class SyncStore : IDisposable
     {
         lock (_writeLock)
         {
-            return Now() - 1;
+            return Now() - CursorLag;
+        }
+    }
+
+    /// <summary>
+    /// Wait until a feed read serves the rows stamped <paramref name="stamp"/>:
+    /// until the cursor (<see cref="Snapshot"/>) reaches the stamp, on this
+    /// store's clock.
+    /// </summary>
+    /// <param name="stamp">A stamp <see cref="RecordItemEvents"/> returned.</param>
+    /// <param name="cancellationToken">Ends the wait early.</param>
+    /// <returns>A task that completes once the rows are served.</returns>
+    public async Task WaitUntilServedAsync(long stamp, CancellationToken cancellationToken)
+    {
+        while (Now() - CursorLag < stamp)
+        {
+            var due = DateTimeOffset.FromUnixTimeSeconds(stamp + CursorLag) - _clock.GetUtcNow();
+            await Task.Delay(due, _clock, cancellationToken).ConfigureAwait(false);
         }
     }
 

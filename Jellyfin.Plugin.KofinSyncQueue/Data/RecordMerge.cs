@@ -34,29 +34,48 @@ public static class RecordMerge
             LibraryIds = incoming.LibraryIds ?? existing?.LibraryIds,
         };
 
+        record.Status = Fold(existing?.Status, incoming.Status);
+
         if (incoming.Status == ItemStatus.Removed)
         {
-            record.Status = ItemStatus.Removed;
             record.UpdateReasons = 0;
-            return record;
         }
-
-        if (existing is null || existing.Status == ItemStatus.Removed)
+        else if (existing is null || existing.Status == ItemStatus.Removed)
         {
             // Fresh, or a re-appearance after removal: start over from the
             // incoming event.
-            record.Status = incoming.Status;
             record.UpdateReasons = incoming.UpdateReasons;
-            return record;
+        }
+        else
+        {
+            record.UpdateReasons = existing.UpdateReasons | incoming.UpdateReasons;
         }
 
-        // Added swallows Updated in either order; reasons accumulate.
-        record.Status =
-            existing.Status == ItemStatus.Added || incoming.Status == ItemStatus.Added
-                ? ItemStatus.Added
-                : ItemStatus.Updated;
-        record.UpdateReasons = existing.UpdateReasons | incoming.UpdateReasons;
-
         return record;
+    }
+
+    /// <summary>
+    /// The status rule alone: an item's status after an event, given the
+    /// status it had. A removal wins, an event after a removal starts over,
+    /// and Added swallows Updated in either order.
+    /// </summary>
+    /// <param name="existing">The status before the event; null when there is none.</param>
+    /// <param name="incoming">The event's status.</param>
+    /// <returns>The status after the event.</returns>
+    public static ItemStatus Fold(ItemStatus? existing, ItemStatus incoming)
+    {
+        if (incoming == ItemStatus.Removed)
+        {
+            return ItemStatus.Removed;
+        }
+
+        if (existing is null || existing == ItemStatus.Removed)
+        {
+            return incoming;
+        }
+
+        return existing == ItemStatus.Added || incoming == ItemStatus.Added
+            ? ItemStatus.Added
+            : ItemStatus.Updated;
     }
 }

@@ -12,7 +12,7 @@ Both endpoints are authorized; the user is derived from the access token — no 
 
 ```
 GET /Kofin/SyncQueue/Info
-→ { "PluginVersion": "10.11.0.5", "ProtocolVersion": 1,
+→ { "PluginVersion": "10.11.0.6", "ProtocolVersion": 1,
     "ServerTime": <unix>, "RetentionCutoff": <unix|0>, "RetentionDays": 90,
     "Features": ["library-scope", "playlists"] }
 
@@ -40,6 +40,10 @@ Semantics:
 * **Null fields are omitted, not emitted as `null`** — the server's serializer ignores nulls, so `Etag`, `UpdateReason`, `SeriesId` and `SeasonId` are simply absent when they do not apply. Read them with an absent-tolerant accessor; do not require the key.
 * Records are visibility-filtered for the calling user; `UserData` rows are the caller's only.
 * `RetentionCutoff > 0 && since < RetentionCutoff` means records in the gap are gone — run a reconciliation pass instead of trusting the window.
+
+## Push
+
+After each batch it records, the plugin sends every Kofin session (the client name `Kofin`) a `LibraryChanged` message shaped like Jellyfin's own: `ItemsAdded` and `ItemsUpdated` name the batch's items the session's user can see, `ItemsRemoved` every removal (as Jellyfin's does), and the folder lists are empty. It is sent as soon as a feed read serves the batch, the second after its stamp, which is a few seconds after the last change of a scan. Jellyfin sends its own only once the library has been quiet for `LibraryUpdateDuration` (30 s by default, restarted by every change), and still does, so a client hears each change twice; one that catches up from the feed on either loses nothing to the other. Other clients get Jellyfin's message alone.
 
 ## Storage
 
@@ -72,8 +76,8 @@ Add the Kontell plugin repository, then install from the catalog — Jellyfin un
 Or install manually — unzip into a versioned folder under the server's plugin directory and restart:
 
 ```
-sudo unzip kofin-sync-queue_10.11.0.5.zip \
-    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.5"
-sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.5"
+sudo unzip kofin-sync-queue_10.11.0.6.zip \
+    -d "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.6"
+sudo chown -R jellyfin:jellyfin "/var/lib/jellyfin/plugins/Kofin Sync Queue_10.11.0.6"
 sudo systemctl restart jellyfin
 ```
