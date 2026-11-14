@@ -29,27 +29,28 @@ public class ChangePusher
     private readonly ISessionManager _sessionManager;
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
+    private readonly SyncStore _store;
     private readonly ILogger<ChangePusher> _logger;
-    private readonly TimeProvider _clock;
 
     public ChangePusher(
         ISessionManager sessionManager,
         IUserManager userManager,
         ILibraryManager libraryManager,
-        ILogger<ChangePusher> logger,
-        TimeProvider? clock = null)
+        SyncStore store,
+        ILogger<ChangePusher> logger)
     {
         _sessionManager = sessionManager;
         _userManager = userManager;
         _libraryManager = libraryManager;
+        _store = store;
         _logger = logger;
-        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>
-    /// Send every Kofin session the batch's changes it may see. Never throws:
-    /// a client that misses the message still finds the records at its next
-    /// catch-up.
+    /// Send every Kofin session the batch's changes its user may see, once a
+    /// feed read serves the batch, so a client that catches up on the
+    /// message finds what it names. Never throws: a session that misses the
+    /// message finds the records at its next catch-up.
     /// </summary>
     /// <param name="batch">The batch as recorded, in occurrence order.</param>
     /// <param name="stamp">The batch's stamp (<see cref="SyncStore.RecordItemEvents"/>).</param>
@@ -58,59 +59,37 @@ public class ChangePusher
     {
         try
         {
-            var sessions = _sessionManager.Sessions
-                .Where(s => string.Equals(s.Client, KofinClient, StringComparison.OrdinalIgnoreCase)
-                    && !s.UserId.Equals(Guid.Empty)
-                    && !string.IsNullOrEmpty(s.DeviceId))
-                .ToList();
-
-            if (sessions.Count == 0)
+            if (KofinSessions().Count == 0)
             {
                 return;
             }
 
-            // A feed read serves a batch from the second after its stamp on
-            // (SyncStore.Snapshot): a client that caught up any sooner would
-            // not find what it was told about.
-            var due = DateTimeOffset.FromUnixTimeSeconds(stamp + 1) - _clock.GetUtcNow();
-            if (due > TimeSpan.Zero)
-            {
-                await Task.Delay(due, _clock, CancellationToken.None).ConfigureAwait(false);
-            }
+            await _store.WaitUntilServedAsync(stamp, CancellationToken.None).ConfigureAwait(false);
 
+            // Whoever is connected now, not before the wait.
+            var sessions = KofinSessions();
             var changes = Coalesce(batch);
+            var messages = new Dictionary<Guid, LibraryUpdateInfo?>();
+            var messageId = Guid.NewGuid();
+            var told = 0;
 
-            foreach (var byUser in sessions.GroupBy(s => s.UserId))
+            foreach (var session in sessions)
             {
-                var user = _userManager.GetUserById(byUser.Key);
-                if (user is null)
+                if (!messages.TryGetValue(session.UserId, out var info))
                 {
-                    continue;
+                    info = MessageFor(session.UserId, changes);
+                    messages[session.UserId] = info;
                 }
 
-                var info = Describe(
-                    changes,
-                    id => _libraryManager.GetItemById(id)?.IsVisibleStandalone(user) == true);
-
-                if (info.IsEmpty)
+                if (info is not null && await SendAsync(session, messageId, info).ConfigureAwait(false))
                 {
-                    continue;
-                }
-
-                foreach (var deviceId in byUser.Select(s => s.DeviceId).Distinct(StringComparer.Ordinal))
-                {
-                    await _sessionManager.SendMessageToUserDeviceSessions(
-                            deviceId,
-                            SessionMessageType.LibraryChanged,
-                            info,
-                            CancellationToken.None)
-                        .ConfigureAwait(false);
+                    told++;
                 }
             }
 
             _logger.LogDebug(
                 "Told {Sessions} Kofin session(s) about {Count} library change(s)",
-                sessions.Count,
+                told,
                 changes.Count);
         }
         catch (Exception exception)
@@ -120,22 +99,26 @@ public class ChangePusher
     }
 
     /// <summary>
-    /// One status per item, by the rules the store coalesces by
-    /// (<see cref="RecordMerge"/>).
+    /// This batch's net status for each item, folded from nothing by the
+    /// store's status rule (<see cref="RecordMerge.Fold"/>). The store folds
+    /// each event into the record it already holds, so an item it recorded
+    /// as added earlier stays added there when this batch edits it; here the
+    /// edit is an update, and a client fetches an item named as updated.
     /// </summary>
     /// <param name="batch">The events, in occurrence order.</param>
     /// <returns>Each item's status after the batch.</returns>
     public static IReadOnlyDictionary<Guid, ItemStatus> Coalesce(IEnumerable<ItemEvent> batch)
     {
-        var records = new Dictionary<Guid, ItemRec>();
+        var statuses = new Dictionary<Guid, ItemStatus>();
 
         foreach (var itemEvent in batch)
         {
-            records.TryGetValue(itemEvent.ItemId, out var existing);
-            records[itemEvent.ItemId] = RecordMerge.Apply(existing, itemEvent, 0);
+            statuses[itemEvent.ItemId] = RecordMerge.Fold(
+                statuses.TryGetValue(itemEvent.ItemId, out var status) ? (ItemStatus?)status : null,
+                itemEvent.Status);
         }
 
-        return records.ToDictionary(pair => pair.Key, pair => pair.Value.Status);
+        return statuses;
     }
 
     /// <summary>
@@ -162,5 +145,50 @@ public class ChangePusher
             ItemsUpdated = Ids(ItemStatus.Updated, true),
             ItemsRemoved = Ids(ItemStatus.Removed, false),
         };
+    }
+
+    private List<SessionInfo> KofinSessions()
+    {
+        return _sessionManager.Sessions
+            .Where(s => string.Equals(s.Client, KofinClient, StringComparison.OrdinalIgnoreCase)
+                && !s.UserId.Equals(Guid.Empty))
+            .ToList();
+    }
+
+    /// <summary>The user's message, or null when there is nothing to send.</summary>
+    private LibraryUpdateInfo? MessageFor(Guid userId, IReadOnlyDictionary<Guid, ItemStatus> changes)
+    {
+        var user = _userManager.GetUserById(userId);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var info = Describe(changes, id => _libraryManager.GetItemById(id)?.IsVisibleStandalone(user) == true);
+        return info.IsEmpty ? null : info;
+    }
+
+    /// <summary>
+    /// The message to this session alone, through its own controllers:
+    /// Jellyfin's per-device send writes to every session that shares the
+    /// device id, whatever its client or user.
+    /// </summary>
+    private async Task<bool> SendAsync(SessionInfo session, Guid messageId, LibraryUpdateInfo info)
+    {
+        try
+        {
+            foreach (var controller in session.SessionControllers)
+            {
+                await controller.SendMessage(SessionMessageType.LibraryChanged, messageId, info, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Could not tell Kofin session {Session} about library changes", session.Id);
+            return false;
+        }
     }
 }

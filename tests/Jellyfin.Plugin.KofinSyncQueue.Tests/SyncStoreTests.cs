@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Jellyfin.Plugin.KofinSyncQueue.Data;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -99,6 +101,26 @@ public sealed class SyncStoreTests : IDisposable
         Assert.Empty(_store.Snapshot(0, Guid.Empty).Items);
         _clock.Seconds = stamp + 1;
         Assert.Single(_store.Snapshot(0, Guid.Empty).Items);
+    }
+
+    [Fact]
+    public async Task TheWaitForAStampEndsWhenAReadServesIt()
+    {
+        var clock = new SteppedClock(DateTimeOffset.FromUnixTimeSeconds(300).AddMilliseconds(300));
+        var id = Guid.NewGuid();
+        using var store = new SyncStore(Path.Combine(_directory, "stepped"), NullLogger<SyncStore>.Instance, clock);
+        var stamp = store.RecordItemEvents(new[] { Event(id, ItemStatus.Added) });
+
+        var wait = store.WaitUntilServedAsync(stamp, CancellationToken.None);
+        clock.Advance(TimeSpan.FromMilliseconds(699));
+
+        Assert.False(wait.IsCompleted);
+        Assert.Empty(store.Snapshot(0, Guid.Empty).Items);
+
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        await wait.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(id, Assert.Single(store.Snapshot(0, Guid.Empty).Items).ItemId);
     }
 
     [Fact]

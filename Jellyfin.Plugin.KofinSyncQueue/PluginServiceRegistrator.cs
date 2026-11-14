@@ -26,6 +26,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             serviceProvider.GetRequiredService<ISessionManager>(),
             serviceProvider.GetRequiredService<IUserManager>(),
             serviceProvider.GetRequiredService<ILibraryManager>(),
+            serviceProvider.GetRequiredService<SyncStore>(),
             serviceProvider.GetRequiredService<ILogger<ChangePusher>>()));
         serviceCollection.AddHostedService<LibraryChangeRecorder>();
         serviceCollection.AddHostedService<UserDataRecorder>();
